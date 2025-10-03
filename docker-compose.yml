@@ -8,14 +8,15 @@ services:
       - APP_ENV=production
       - DB_DIALECT=postgres
       - DB_PORT=5432
+      - DB_HOST=db
     volumes:
       - ./storage:/app/nocobase/storage
     ports:
       - '13000:80'
     depends_on:
-      postgres:
+      - db
   
-  postgres:
+  db:
     image: postgres
     restart: unless-stopped
     environment:
