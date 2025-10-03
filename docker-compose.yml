@@ -1,0 +1,25 @@
+services:
+  nocobase:
+    image: nocobase/nocobase:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TZ=Asia/Phnom_Penh
+      - APP_KEY=your-secret-key
+      - APP_ENV=production
+      - DB_DIALECT=postgres
+      - DB_PORT=5432
+    volumes:
+      - ./storage:/app/nocobase/storage
+    ports:
+      - '13000:80'
+  
+  postgres:
+    image: postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=nocobase
+      - POSTGRES_PASSWORD=159357
+      - POSTGRES_DB=nocobase
+    volumes:
+      - postgresql-db:/var/lib/postgresql/data

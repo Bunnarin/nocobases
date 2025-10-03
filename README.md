@@ -1,0 +1,1 @@
+this is for the nocobase multiapp on a single vps. to setup just migrate the .sql.tar file (which defines the app config) to the respective sub app db

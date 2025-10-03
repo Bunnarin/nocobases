@@ -1,0 +1,32 @@
+<script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+<style>
+    table, th, td {
+        border: 1px solid black;
+        border-collapse: collapse;
+    }
+</style>
+<button onclick ="downloadDocx()">download</button>  
+<div id="content">
+  <h1>{{$nRecord.name}}</h1>
+  <table>
+      <tr>
+          <th>status</th>
+          <th>expectated</th>
+      </tr>
+      {{#each $nRecord.subtasks}}
+      <tr>
+          <td>{{this.status}}</td>
+          <td>{{this.expectation}}</td>
+      </tr>
+      {{/each}}
+  </table>
+</div>
+
+<script>
+    function downloadDocx() {
+        const contentHtml = document.getElementById('content').innerHTML;
+        saveAs(htmlDocx.asBlob(contentHtml), 'document.docx');
+    }
+</script>
+
