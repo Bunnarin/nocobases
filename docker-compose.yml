@@ -5,7 +5,6 @@ services:
     env_file: .env
     environment:
       - TZ=Asia/Phnom_Penh
-      - APP_KEY=your-secret-key
       - APP_ENV=production
       - DB_DIALECT=postgres
       - DB_PORT=5432
@@ -13,6 +12,8 @@ services:
       - ./storage:/app/nocobase/storage
     ports:
       - '13000:80'
+    depends_on:
+      postgres:
   
   postgres:
     image: postgres
@@ -22,6 +23,9 @@ services:
       - POSTGRES_PASSWORD=159357
       - POSTGRES_DB=nocobase
     volumes:
-      - ./db:/var/lib/postgresql/data
+      db:/var/lib/postgresql/data
+
+volumes:
+  db:
 
 
