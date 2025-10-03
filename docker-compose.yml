@@ -22,4 +22,6 @@ services:
       - POSTGRES_PASSWORD=159357
       - POSTGRES_DB=nocobase
     volumes:
-      - postgresql-db:/var/lib/postgresql/data
+      - ./db:/var/lib/postgresql/data
+
+
