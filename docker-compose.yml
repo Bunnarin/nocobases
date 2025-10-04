@@ -23,6 +23,8 @@ services:
       - POSTGRES_USER=nocobase
       - POSTGRES_PASSWORD=159357
       - POSTGRES_DB=nocobase
+    ports:
+      - '5432:5432'
     volumes:
       - db:/var/lib/postgresql/data
 
