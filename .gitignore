@@ -1,5 +1,2 @@
 .env
-storage/logs/
-storage/plugins/
-storage/uploads/
-storage/.license/
+storage/

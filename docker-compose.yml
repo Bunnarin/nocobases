@@ -3,29 +3,9 @@ services:
     image: nocobase/nocobase:latest
     restart: unless-stopped
     env_file: .env
-    environment:
-      - TZ=Asia/Phnom_Penh
-      - APP_ENV=production
-      - DB_DIALECT=postgres
-      - DB_PORT=5432
-      - DB_HOST=db
     volumes:
       - ./storage:/app/nocobase/storage
     ports:
       - '13000:80'
-    depends_on:
-      - db
-  
-  db:
-    image: postgres
-    restart: unless-stopped
-    env_file: .env
-    ports:
-      - '5432:5432'
-    volumes:
-      - db:/var/lib/postgresql/data
-
-volumes:
-  db:
 
 
