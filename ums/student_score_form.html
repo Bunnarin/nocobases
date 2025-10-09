@@ -1,0 +1,66 @@
+<div id="scoreForm">
+    <button onclick="submitScores">Submit</button>
+</div>
+
+<script>
+const TARGET_SUBJECT_ID = {{$nPopupRecord.subject_id}};
+let students = [];
+const scoreForm = document.getElementById('scoreForm');
+
+async function generateInputs() {
+    // populate all the students
+    const params = new URLSearchParams({
+        appends: ['user', 'scores'],
+        filter: JSON.stringify({ class_id: {{$nPopupRecord.class_id}} })
+    });
+    await fetch(`http://localhost:13000/api/student:list?${params.toString()}`, 
+        { headers: { 'Authorization': 'Bearer {{$nToken}}', 'X-App': 'ums' } })
+        .then(response => response.json())
+        .then(({data})=> students = data);
+        
+    let inputHtml = '';
+    
+    students.forEach(student => {
+        const studentName = student.user.nickname;
+        const targetScore = student.scores.find(score => score.subject_id === TARGET_SUBJECT_ID);
+        const scoreId = targetScore?.id || 'new';
+        const initialValue = targetScore?.value || 0;
+        inputHtml += `
+            <br>${studentName}:
+            <input type="number" id="${scoreId}" name="${student.id}" value="${initialValue}">
+        `;
+    });
+
+    // Insert the entire HTML string into the form element at the end
+    scoreForm.insertAdjacentHTML('beforeend', inputHtml);
+}
+
+function submitScores() {
+    document.querySelectorAll('input').forEach(input => {
+        const score_id = input.id;
+        const student_id = input.name;
+        
+        if (score_id === 'new') 
+            return fetch(`http://localhost:13000/api/score:create`, { 
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer {{$nToken}}', 'X-App': 'ums'},
+                body: JSON.stringify({ value: input.value, subject_id: TARGET_SUBJECT_ID, student_id: parseInt(student_id) })
+            });
+
+        // if value hasn't changed, skip
+        const { value } = students.find(student => student.id == student_id).scores.find(score => score.id == score_id);
+        if (value == input.value) 
+            return;
+
+        // update
+        fetch(`http://localhost:13000/api/score:update?filterByTk=${score_id}`, { 
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer {{$nToken}}', 'X-App': 'ums' },
+            body: JSON.stringify({ value: input.value })
+        });
+    });
+}
+
+// Initialize the form when the script loads
+document.addEventListener('DOMContentLoaded', generateInputs);
+</script>
