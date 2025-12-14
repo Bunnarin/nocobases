@@ -1,11 +1,11 @@
 services:
-  nocobase:
+  # let's just use this as the main app for now, as Im in a rush
+  peacemaker:
     image: nocobase/nocobase:latest
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - .env
     volumes:
       - ./storage:/app/nocobase/storage
     ports:
       - '13000:80'
-
-
