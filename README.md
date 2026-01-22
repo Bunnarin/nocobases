@@ -3,12 +3,12 @@ this is for the nocobase multiapp on a single vps. to setup just migrate the .sq
 apt update
 apt install certbot python3-certbot-nginx nginx git postgresql postgresql-client
 
-follow this instruction https://docs.docker.com/engine/install/ubuntu/
+follow this instruction https://docs.docker.com/engine/install/
 
 git clone repo
 
 <!-- setup nginx config -->
-add this in /etc/nginx/conf.d/<domain>.conf
+add this in /etc/nginx/conf.d/your_domain.conf
 ```
 server {
     listen 80;
@@ -41,4 +41,13 @@ add this to /etc/postgresql/<version>/main/pg_hba.conf
 host        all         all         172.18.0.0/16       scram-sha-256
 
 <!-- restore the db -->
-pg_restore -U nocobase -d nocobase ./path/to/your_backup_file.sql
+pg_restore -h localhost -U <user> -d <db> ./path/to/your_backup_file.sql
+
+<!-- make sure ./storage exist, or else it'll create as root user (which will cause problem) -->
+docker run -d \
+  --name my-app \
+  --restart unless-stopped \
+  --env-file .env \
+  -v "$(pwd)/storage:/app/nocobase/storage" \
+  -p 13000:80 \
+  nocobase/nocobase:latest
