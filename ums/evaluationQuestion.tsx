@@ -1,31 +1,25 @@
 const { React } = ctx.libs;
 
-let questions = [];
-await ctx.api.request({
+const { data: { data: questions } } = await ctx.api.request({
   url: 'evaluationQuestion:list',
-}).then(({ data }) => questions = data.data);
+});
 
 const handleSubmit = async (e) => {
   e.preventDefault();
+  const form = e.target;
+  if (!form.checkValidity()) return;
 
-  let schedule;
-  await ctx.api.request({
+  const { data: { data: schedule } } = await ctx.api.request({
     url: 'schedule:get',
     params: {
-      appends: 'completedStudents',
       filterByTk: ctx.value
     },
-  }).then(({ data }) => schedule = data.data);
-  console.log(schedule);
-
-  const form = e.target;
-  const results = {};
+  })
 
   questions.forEach((field, i) => {
     schedule[`question${i}`] ??= {};
     if (field.type === 'checkbox') {
       const checkboxes = form.querySelectorAll(`input[name="${field.label}"]:checked`);
-      results[field.label] = Array.from(checkboxes).map(cb => cb.value);
       Array.from(checkboxes).forEach(({ value }) => {
         schedule[`question${i}`][value] ??= 0;
         schedule[`question${i}`][value] += 1;
@@ -33,13 +27,10 @@ const handleSubmit = async (e) => {
     } else {
       const input = form.elements[field.label];
       if (!input.value) return;
-      results[field.label] = input.value;
       schedule[`question${i}`][input.value] ??= 0;
       schedule[`question${i}`][input.value] += 1;
     }
   });
-  schedule.completedStudents ??= [];
-  schedule.completedStudents.push(ctx.user.studentId);
 
   await ctx.api.request({
     url: 'schedule:update',
@@ -48,7 +39,7 @@ const handleSubmit = async (e) => {
     data: schedule
   });
 
-  ctx.message.success(JSON.stringify(results));
+  ctx.message.success('done, you can exit this page now');
 };
 
 const App = () =>

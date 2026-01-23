@@ -1,17 +1,17 @@
-const { data: { data: { CLOs } } } = await ctx.api.request({
+const { data: { data: { CLOs, weights: oldWeights } } } = await ctx.api.request({
     url: 'course:get',
     params: {
         filterByTk: ctx.value,
-        appends: 'CLOs,CLOs.assessments,CLOs.PLOs'
+        appends: 'weights,CLOs,CLOs.assessments,CLOs.PLOs'
     },
 });
 
 const { React } = ctx.libs;
 
 const App = () => {
-    const [weights, setWeights] = React.useState([]);
+    const [weights, setWeights] = React.useState(oldWeights);
 
-    const onSubmit = (e) => {
+    const onSubmit = async (e) => {
         let totalWeight = 0;
         weights.forEach(w => totalWeight += Number(w.weight));
         if (totalWeight !== 100)
@@ -22,14 +22,35 @@ const App = () => {
             return ctx.message.error('after this, you cannot make any further changes. click again to submit');
         }
 
-        weights.forEach(w => {
-            const payload = { ...w };
-            delete payload.id; // Remove temporary React key
-            console.log(payload);
-            ctx.api.request({
+        for (const w of weights) {
+            // only create the newly formed weight
+            if (w.id) continue;
+            const payload = {
+                ...w,
+                assessment: w.assessmentId,
+                PLO: w.PLOId,
+                CLO: w.CLOId
+            };
+
+            await ctx.api.request({
                 url: 'weight:create',
+                method: 'POST',
                 data: payload
-            });
+            }).then(({ data }) =>
+                setWeights(prev => prev.map(w => w.id === w.id ? data.data : w))
+            );
+        }
+
+        // now time to assosicate them with course.weights
+        ctx.api.request({
+            url: 'course:update',
+            method: 'POST',
+            params: {
+                filterByTk: ctx.value
+            },
+            data: {
+                weights: weights.map(w => w.id)
+            }
         });
         ctx.message.success('done. you can close this popup now');
     }
@@ -38,7 +59,7 @@ const App = () => {
         setWeights(prev => [
             ...prev,
             {
-                id: Math.random().toString(36).slice(2, 9),
+                tempId: Math.random().toString(36).slice(2, 9),
                 course: ctx.value,
                 CLOId,
                 PLOId: '',
@@ -49,11 +70,11 @@ const App = () => {
     };
 
     const removeWeight = (weightId) =>
-        setWeights(prev => prev.filter(w => w.id !== weightId));
+        setWeights(prev => prev.filter(w => (w.id || w.tempId) !== weightId));
 
     const updateWeight = (weightId, key, value) =>
         setWeights(prev => prev.map(w =>
-            w.id != weightId ? w : { ...w, [key]: parseInt(value) }
+            w.tempId != weightId ? w : { ...w, [key]: parseInt(value) }
             // the id and weight will always be int
         ));
 
@@ -104,12 +125,12 @@ const App = () => {
                                 .filter(other =>
                                     other.CLOId === clo.id &&
                                     other.PLOId === w.PLOId &&
-                                    other.id !== w.id // Don't filter out the current row's selection
+                                    other.id !== (w.id || w.tempId) // Don't filter out the current row's selection
                                 )
                                 .map(other => parseInt(other.assessmentId));
 
                             return (
-                                <tr key={w.id}>
+                                <tr key={w.tempId}>
                                     {index === 0 && (
                                         <td rowSpan={cloWeights.length}>
                                             <button className="btn-add" onClick={() => addWeight(clo.id)}>
@@ -119,9 +140,10 @@ const App = () => {
                                     )}
                                     <td>
                                         <select
+                                            required
                                             value={w.PLOId}
                                             disabled={isLocked}
-                                            onChange={(e) => updateWeight(w.id, 'PLOId', e.target.value)}
+                                            onChange={(e) => updateWeight(w.tempId, 'PLOId', e.target.value)}
                                         >
                                             <option value="">Select PLO</option>
                                             {clo.PLOs.map(plo => (
@@ -131,9 +153,10 @@ const App = () => {
                                     </td>
                                     <td>
                                         <select
+                                            required
                                             value={w.assessmentId}
                                             disabled={!w.PLOId || isLocked}
-                                            onChange={(e) => updateWeight(w.id, 'assessmentId', e.target.value)}
+                                            onChange={(e) => updateWeight(w.tempId, 'assessmentId', e.target.value)}
                                         >
                                             <option value="">Select Assessment</option>
                                             {clo.assessments
@@ -146,15 +169,17 @@ const App = () => {
                                     </td>
                                     <td>
                                         <input
+                                            required
+                                            disabled={w.id}
                                             type="number"
                                             min="0"
                                             max="100"
                                             value={w.weight}
-                                            onChange={(e) => updateWeight(w.id, 'weight', e.target.value)}
+                                            onChange={(e) => updateWeight(w.tempId, 'weight', e.target.value)}
                                         />
                                     </td>
                                     <td>
-                                        <button onClick={() => removeWeight(w.id)}>✕</button>
+                                        <button onClick={() => removeWeight(w.id || w.tempId)}>✕</button>
                                     </td>
                                 </tr>
                             );
