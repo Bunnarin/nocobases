@@ -4,7 +4,7 @@ const { data: { data: schedule } } = await ctx.api.request({
     url: 'schedule:get',
     params: {
         filterByTk: ctx.value,
-        appends: 'course,course.weights,course.weights.assessment,course.weights.PLO,class.students,class.students.scores'
+        appends: 'course,course.weights,course.weights.assessment,course.weights.PLO,course.weights.CLO,class.students,class.students.scores'
     },
 });
 
@@ -19,17 +19,39 @@ const isExpired = (createdOn) => {
     return diffDays > 30;
 };
 
-const assessments = Object.values(weights.reduce((acc, { assessment, PLO, id: weightId }) => {
-    const name = assessment.name;
-    acc[name] ??= {
-        name,
-        PLOs: []
-    };
-    acc[name].PLOs.push({ ...PLO, weightId });
-    return acc;
-}, {}));
+const assessments = Object.values(weights.reduce((acc, { assessment, CLO, PLO, weight, id: weightId }) => {
+    const aName = assessment.name;
+    const cId = CLO.id; // Or CLO.name/number
 
-const SuffixInput = ({ disabled, value, weightId, studentId }) => {
+    // 1. Initialize Assessment if it doesn't exist
+    if (!acc[aName]) {
+        acc[aName] = {
+            ...assessment,
+            CLOs: {} // Use an object temporarily for easy lookups
+        };
+    }
+
+    // 2. Initialize CLO inside that Assessment if it doesn't exist
+    if (!acc[aName].CLOs[cId]) {
+        acc[aName].CLOs[cId] = {
+            ...CLO,
+            PLOs: []
+        };
+    }
+
+    // 3. Push the PLO into the specific CLO's array
+    acc[aName].CLOs[cId].PLOs.push({ ...PLO, weight, weightId });
+
+    return acc;
+}, {})).map(assessment => ({
+    ...assessment,
+    // 4. Convert the CLOs lookup object back into an array
+    CLOs: Object.values(assessment.CLOs)
+}));
+
+console.log(assessments);
+
+const SuffixInput = ({ disabled, value, max, weightId, studentId }) => {
     const [isFocused, setIsFocused] = React.useState(false);
     const timeoutRef = React.useRef(null); // To store the debounce timer
 
@@ -78,7 +100,7 @@ const SuffixInput = ({ disabled, value, weightId, studentId }) => {
             <input
                 type="number"
                 min="0"
-                max="100"
+                max={max}
                 step="1"
                 defaultValue={value}
                 onChange={handleChange}
@@ -100,62 +122,80 @@ const SuffixInput = ({ disabled, value, weightId, studentId }) => {
                         transform: 'translateY(-50%)',
                     }}
                 >
-                    /100
+                    /{max}
                 </span>
             )}
         </div>
     );
 }
 
-const App = () =>
-(
-    <table style={{ fontFamily: 'Khmer OS Battambang' }}>
+const App = () => (
+    <table style={{ fontFamily: 'Khmer OS Battambang', borderCollapse: 'collapse', width: '100%' }}>
         <thead>
-            {/* Header Row 1: Scoring Criteria */}
+            {/* Header Row 1: Assessment Name */}
             <tr style={{ backgroundColor: '#f2f2f2' }}>
-                <th rowSpan={2}>សិស្ស</th>
-                {assessments.map(assessment => (
-                    <th colSpan={assessment.PLOs.length}
-                        style={{ border: 'solid' }}>
-                        {assessment.name}
-                    </th>
-                ))}
+                <th rowSpan={3} style={{ border: '1px solid black' }}>សិស្ស</th>
+                {assessments.map(assessment => {
+                    // Total PLOs across all CLOs in this assessment
+                    const totalPlos = assessment.CLOs.reduce((sum, clo) => sum + clo.PLOs.length, 0);
+                    return (
+                        <th key={assessment.name} colSpan={totalPlos} style={{ border: '1px solid black', padding: '8px' }}>
+                            {assessment.name}
+                        </th>
+                    );
+                })}
             </tr>
-            {/* Header Row 2: PLOs under each Criteria */}
-            <tr style={{ backgroundColor: '#f2f2f2' }}>
+
+            {/* Header Row 2: CLO under Assessment */}
+            <tr style={{ backgroundColor: '#e9ecef' }}>
                 {assessments.map(assessment =>
-                    assessment.PLOs.map(plo => (
-                        <th title={plo.statement}
-                            style={{ border: 'solid' }}>
-                            PLO {plo.number}
+                    assessment.CLOs.map(clo => (
+                        <th key={clo.id} title={clo.statement} colSpan={clo.PLOs.length} style={{ border: '1px solid black', fontSize: '0.9rem' }}>
+                            CLO {clo.number}
                         </th>
                     ))
                 )}
             </tr>
+
+            {/* Header Row 3: PLOs under each CLO */}
+            <tr style={{ backgroundColor: '#f2f2f2' }}>
+                {assessments.map(assessment =>
+                    assessment.CLOs.map(clo =>
+                        clo.PLOs.map(plo => (
+                            <th key={plo.weightId} title={plo.statement} style={{ border: '1px solid black', padding: '4px' }}>
+                                PLO {plo.number}
+                            </th>
+                        ))
+                    )
+                )}
+            </tr>
         </thead>
+
         <tbody>
             {students.map(student => (
-                <tr>
-                    <td style={{ border: 'solid' }}>
+                <tr key={student.id}>
+                    <td style={{ border: '1px solid black', padding: '8px' }}>
                         {student.khmerName}
                     </td>
                     {assessments.map(assessment =>
-                        assessment.PLOs.map(plo => {
-                            const originalScore = student.scores.find(s =>
-                                s.weightId == plo.weightId &&
-                                s.studentId == student.id
-                            );
-                            return (
-                                <td style={{ border: 'solid' }}>
-                                    <SuffixInput
-                                        value={originalScore?.value ?? ''}
-                                        studentId={student.id}
-                                        weightId={plo.weightId}
-                                        disabled={isExpired(originalScore?.createdOn)}
-                                    />
-                                </td>
-                            );
-                        })
+                        assessment.CLOs.map(clo =>
+                            clo.PLOs.map(plo => {
+                                const originalScore = student.scores.find(s =>
+                                    s.weightId === plo.weightId && s.studentId === student.id
+                                );
+                                return (
+                                    <td key={`${student.id}-${plo.weightId}`} style={{ border: '1px solid black', textAlign: 'center' }}>
+                                        <SuffixInput
+                                            max={assessment.weight}
+                                            value={originalScore?.value ?? ''}
+                                            studentId={student.id}
+                                            weightId={plo.weightId}
+                                            disabled={isExpired(originalScore?.createdOn)}
+                                        />
+                                    </td>
+                                );
+                            })
+                        )
                     )}
                 </tr>
             ))}
