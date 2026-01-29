@@ -43,22 +43,19 @@ const App = () => {
     });
 
     const getNextStatus = {
-        A: 'P',
-        P: 'L',
-        L: 'A'
+        A: 'L',
+        L: 'P',
+        P: 'A'
     };
 
-    const getStatusConfig = (status) => {
-        switch (status) {
-            case 'P': return { label: 'P', color: '#10b981', bg: '#ecfdf5', short: 'P' };
-            case 'L': return { label: 'L', color: '#f59e0b', bg: '#fffbeb', short: 'L' };
-            case 'E': return { label: 'E', color: '#f59e0b', bg: '#fffbeb', short: 'E' };
-            case 'A':
-            default: return { label: 'A', color: '#ef4444', bg: '#fef2f2', short: 'A' };
-        }
-    };
+    const getStatusConfig = {
+        A: { label: 'A', color: '#ef4444', bg: '#fef2f2', short: 'A' },
+        L: { label: 'L', color: '#f59e0b', bg: '#fffbeb', short: 'L' },
+        P: { label: 'P', color: '#10b981', bg: '#ecfdf5', short: 'P' },
+        E: { label: 'E', color: '#f59e0b', bg: '#fffbeb', short: 'E' }
+    }
 
-    const handleToggle = (studentId) => {
+    const handleToggle = (studentId) =>
         setAttendanceStates(prev => {
             const current = prev[studentId];
             if (current.isLocked) return prev; // Cannot change locked records
@@ -68,7 +65,6 @@ const App = () => {
                 [studentId]: { ...current, status: getNextStatus[current.status] }
             };
         });
-    };
 
     const markAll = (status) =>
         setAttendanceStates(prev => {
@@ -115,14 +111,14 @@ const App = () => {
         // Update local state with new IDs and locks
         setAttendanceStates(prev => {
             const next = { ...prev };
-            results.forEach(({ studentId, id, status }) => {
+            results.forEach(({ studentId, id, status }) =>
                 next[studentId] = {
                     status,
                     // Lock it if it is NOT Absent. If Absent, keep unlocked.
                     isLocked: status !== 'A',
                     id
-                };
-            });
+                }
+            );
             return next;
         });
 
@@ -206,7 +202,7 @@ const App = () => {
                 <tbody>
                     {students.map(student => {
                         const { status, isLocked } = attendanceStates[student.id];
-                        const config = getStatusConfig(status);
+                        const config = getStatusConfig[status];
 
                         return (
                             <tr key={student.id} className="attendance-row">

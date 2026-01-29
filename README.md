@@ -45,9 +45,9 @@ pg_restore -h localhost -U <user> -d <db> ./path/to/your_backup_file.sql
 
 <!-- make sure ./storage exist, or else it'll create as root user (which will cause problem) -->
 docker run -d \
-  --name my-app \
+  --name lms \
   --restart unless-stopped \
   --env-file .env \
   -v "$(pwd)/storage:/app/nocobase/storage" \
   -p 13000:80 \
-  nocobase/nocobase:latest
+  nocobase/nocobase:alpha

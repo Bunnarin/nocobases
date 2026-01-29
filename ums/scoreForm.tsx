@@ -53,17 +53,19 @@ const SuffixInput = ({ disabled, value, max, weightId, studentId }) => {
         // 1. Clear the previous timer every time the user types
         if (timeoutRef.current)
             clearTimeout(timeoutRef.current);
+        if (e.target.value === '')
+            return;
+        if (e.target.value < 0 || e.target.value > max)
+            return ctx.message.error('score must be between 0 and ' + max);
+        const student = students.find(({ id }) => id == studentId);
+        const originalScore = student.scores.find(s =>
+            s.weightId == weightId &&
+            s.studentId == studentId
+        );
+        if (e.target.value === originalScore?.value)
+            return;
         // 2. Set a new timer to call the API after 500ms of silence
         timeoutRef.current = setTimeout(() => {
-            if (e.target.value === '')
-                return;
-            const student = students.find(({ id }) => id == studentId);
-            const originalScore = student.scores.find(s =>
-                s.weightId == weightId &&
-                s.studentId == studentId
-            );
-            if (e.target.value === originalScore?.value)
-                return;
             if (originalScore)
                 ctx.api.request({
                     url: 'score:update',

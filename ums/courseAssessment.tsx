@@ -13,7 +13,7 @@ const App = () => {
 
     const onSubmit = async (e) => {
         let totalWeight = 0;
-        weights.forEach(w => totalWeight += Number(w.weight));
+        weights.forEach(w => totalWeight += w.weight);
         if (totalWeight !== 100)
             return ctx.message.error('the total weight is not 100%');
 
@@ -46,18 +46,6 @@ const App = () => {
             currentWeights[i] = newWeight;
             setWeights([...currentWeights]);
         }
-
-        // now time to associate them with course.weights
-        await ctx.api.request({
-            url: 'course:update',
-            method: 'POST',
-            params: {
-                filterByTk: ctx.value
-            },
-            data: {
-                weights: currentWeights.map(w => w.id)
-            }
-        });
         ctx.message.success('done. you can close this popup now');
     }
 
@@ -78,6 +66,17 @@ const App = () => {
 
     const removeWeight = (weightId) => {
         setWeights(prev => prev.filter(w => w.id !== weightId));
+        // detach it from course
+        ctx.api.request({
+            url: 'weight:update',
+            method: 'POST',
+            params: {
+                filterByTk: weightId
+            },
+            data: {
+                courseId: null
+            }
+        });
     }
 
     const updateWeight = (weightId, key, value) =>
