@@ -21,7 +21,7 @@ weights.forEach(weight => {
     closMap[clo.id] ??= { ...clo, weights: [] };
     closMap[clo.id].weights.push(weight);
 });
-const CLOs = Object.values(closMap).sort((a, b) => a.id - b.id);
+const CLOs = Object.values(closMap).sort((a, b) => a.number - b.number);
 
 // 3. Styles Object
 const styles = {
@@ -45,134 +45,238 @@ const styles = {
     textRed: { color: '#721c24' },
 };
 
-// 4. The Template Component
+// 4. Sub-components
+
+const SummaryTable = () => {
+    // Calculate Summary Data
+    const summaryCLOs = CLOs.map(clo => {
+        // sum weight of all weights belonging to this CLO
+        const totalWeight = clo.weights.reduce((sum, w) => sum + (w.weight || 0), 0);
+        return { ...clo, totalWeight };
+    });
+
+    const summaryStudents = students.map(student => {
+        let grandTotal = 0;
+        const cloScores = summaryCLOs.map(clo => {
+            let cloScore = 0;
+            clo.weights.forEach(w => {
+                const scoreRecord = student.scores.find(s => s.weightId === w.id);
+                cloScore += scoreRecord?.value || 0;
+            });
+            grandTotal += cloScore;
+            return cloScore;
+        });
+
+        const isPass = grandTotal >= passThreshold;
+        return { student, cloScores, grandTotal, isPass };
+    });
+
+    const summaryPassCount = summaryStudents.filter(s => s.isPass).length;
+    const summaryFailCount = summaryStudents.length - summaryPassCount;
+    const summaryPassPct = summaryStudents.length ? ((summaryPassCount / summaryStudents.length) * 100).toFixed(0) : 0;
+    const summaryFailPct = summaryStudents.length ? ((summaryFailCount / summaryStudents.length) * 100).toFixed(0) : 0;
+
+    return (
+        <div className="clo-page" style={styles.cloContainer}>
+            <h3 style={{ color: '#1890ff' }}>Summary Report</h3>
+            <table style={styles.table}>
+                <thead>
+                    <tr style={styles.headerRow1}>
+                        <th style={styles.thHeader}>Student ID</th>
+                        <th style={styles.thHeader}>Student Name</th>
+                        {summaryCLOs.map(clo => (
+                            <th key={clo.id} style={styles.th}>
+                                CLO {clo.number}<br />({clo.totalWeight})
+                            </th>
+                        ))}
+                        <th style={styles.th}>Total Marks<br />(100)</th>
+                        <th style={styles.th}>Course<br />Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {summaryStudents.map((item, idx) => (
+                        <tr key={item.student.id}>
+                            <td style={styles.td}>{item.student.code || item.student.id}</td>
+                            <td style={styles.td}>{item.student.khmerName || item.student.name}</td>
+                            {item.cloScores.map((score, i) => (
+                                <td key={i} style={styles.tdCenter}>{score.toFixed(0)}</td>
+                            ))}
+                            <td style={{
+                                ...styles.tdCenter,
+                                ...(item.isPass ? styles.bgGreen : styles.bgRed)
+                            }}>
+                                {item.grandTotal}
+                            </td>
+                            <td style={styles.tdCenter}>
+                                {(() => {
+                                    const pct = item.grandTotal; // Assuming total weight is 100
+                                    if (pct >= 85) return 'A'; if (pct >= 80) return 'B+'; if (pct >= 70) return 'B';
+                                    if (pct >= 65) return 'C+'; if (pct >= 50) return 'C'; if (pct >= 45) return 'D';
+                                    if (pct >= 40) return 'E'; return 'F';
+                                })()}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colSpan={2 + summaryCLOs.length} rowSpan={4} style={styles.tdNoBorder}></td>
+                        <td style={styles.td}># Fail</td>
+                        <td style={styles.tdCenter}>{summaryFailCount}</td>
+                    </tr>
+                    <tr>
+                        <td style={styles.td}># Pass</td>
+                        <td style={styles.tdCenter}>{summaryPassCount}</td>
+                    </tr>
+                    <tr>
+                        <td style={styles.td}>% Fail</td>
+                        <td style={styles.tdCenter}>{summaryFailPct}%</td>
+                    </tr>
+                    <tr>
+                        <td style={styles.td}>% Pass</td>
+                        <td style={styles.tdCenter}>{summaryPassPct}%</td>
+                    </tr>
+                </tfoot>
+            </table>
+            <br clear="all" style={{ pageBreakBefore: 'always' }} />
+        </div>
+    );
+};
+
+const CLOTable = ({ clo }) => {
+    const assessmentGroupsMap = {};
+    clo.weights.forEach(w => {
+        const aId = w.assessmentId;
+        if (!assessmentGroupsMap[aId]) {
+            assessmentGroupsMap[aId] = {
+                id: aId,
+                name: w.assessment?.name,
+                totalWeight: 0,
+                weights: []
+            };
+        }
+        assessmentGroupsMap[aId].weights.push(w);
+        assessmentGroupsMap[aId].totalWeight += w.weight;
+    });
+
+    const assessmentGroups = Object.values(assessmentGroupsMap);
+    const maxScoreTotal = assessmentGroups.reduce((acc, g) => acc + g.totalWeight, 0);
+
+    const studentResults = students.map(student => {
+        let totalScore = 0;
+        clo.weights.forEach(w => {
+            const scoreRecord = student.scores.find(s => s.weightId === w.id);
+            totalScore += scoreRecord?.value || 0;
+        });
+        const isPass = totalScore / maxScoreTotal >= passThreshold / 100;
+        return { totalScore, isPass };
+    });
+
+    const totalStudents = studentResults.length;
+    const passCount = studentResults.filter(r => r.isPass).length;
+    const failCount = totalStudents - passCount;
+    const passPercentage = ((passCount / totalStudents) * 100).toFixed(0);
+    const failPercentage = ((failCount / totalStudents) * 100).toFixed(0);
+
+    return (
+        <div className="clo-page" style={styles.cloContainer}>
+            <h3 style={{ color: '#1890ff' }}>{`CLO ${clo.number}: ${clo.statement}`}</h3>
+            <table style={styles.table}>
+                <thead>
+                    <tr style={styles.headerRow1}>
+                        <th rowSpan={2} style={styles.thHeader}>id</th>
+                        <th rowSpan={2} style={styles.thHeader}>name</th>
+                        {assessmentGroups.map(group => (
+                            <th key={group.id} style={styles.th}>{group.name}</th>
+                        ))}
+                        <th colSpan={3} style={styles.th}>Total</th>
+                    </tr>
+                    <tr style={styles.headerRow2}>
+                        {assessmentGroups.map(group => (
+                            <th key={group.id} style={styles.th}>CLO score<br />({group.totalWeight}%)</th>
+                        ))}
+                        <th style={styles.th}>Score Max {maxScoreTotal}</th>
+                        <th style={styles.th}>Score Max (%)</th>
+                        <th style={styles.th}>CLO {clo.number} Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {students.map((student, index) => {
+                        const { totalScore, isPass } = studentResults[index];
+                        return (
+                            <tr key={student.id}>
+                                <td style={styles.td}>{student.id}</td>
+                                <td style={styles.td}>{student.khmerName || student.name}</td>
+                                {assessmentGroups.map(group => {
+                                    let groupScore = 0;
+                                    group.weights.forEach(w => {
+                                        const scoreRecord = student.scores.find(s => s.weightId === w.id);
+                                        groupScore += scoreRecord?.value || 0;
+                                    });
+                                    const groupPass = groupScore >= (group.totalWeight / 2);
+                                    return (
+                                        <td key={group.id} style={{
+                                            ...styles.tdCenter,
+                                            ...(groupPass ? styles.bgGreen : styles.bgRed),
+                                            ...(groupPass ? styles.textGreen : styles.textRed),
+                                        }}>{groupScore.toFixed(0)}</td>
+                                    );
+                                })}
+                                <td style={styles.tdCenter}>{totalScore.toFixed(0)}</td>
+                                <td style={{ ...styles.tdCenter, ...(isPass ? styles.bgGreen : styles.bgRed) }}>
+                                    {maxScoreTotal > 0 ? ((totalScore / maxScoreTotal) * 100).toFixed(0) : 0}%
+                                </td>
+                                <td style={{ ...styles.tdCenter }}>
+                                    {(() => {
+                                        const pct = totalScore / maxScoreTotal * 100;
+                                        if (pct >= 85) return 'A'; if (pct >= 80) return 'B+'; if (pct >= 70) return 'B';
+                                        if (pct >= 65) return 'C+'; if (pct >= 50) return 'C'; if (pct >= 45) return 'D';
+                                        if (pct >= 40) return 'E'; return 'F';
+                                    })()}
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colSpan={1 + assessmentGroups.length} rowSpan={4} style={styles.tdNoBorder}></td>
+                        <td style={styles.td}># Fail</td>
+                        <td style={styles.tdCenter}>{failCount}</td>
+                        <td rowSpan={3} style={styles.tdVerticalMiddle}>Avg. CLO Pass/Fail</td>
+                    </tr>
+                    <tr>
+                        <td style={styles.td}># Pass</td>
+                        <td style={styles.tdCenter}>{passCount}</td>
+                    </tr>
+                    <tr>
+                        <td style={styles.td}>Fail %</td>
+                        <td style={styles.tdCenter}>{failPercentage}%</td>
+                    </tr>
+                    <tr style={styles.footerBold}>
+                        <td style={{ ...styles.td, ...styles.bgYellow }}>Pass %</td>
+                        <td style={{ ...styles.tdCenter, ...styles.bgYellow }}>{passPercentage}%</td>
+                        <td style={styles.tdCenter}>{passThreshold}%</td>
+                    </tr>
+                </tfoot>
+            </table>
+            <br clear="all" style={{ pageBreakBefore: 'always' }} />
+        </div>
+    );
+};
+
+// 5. App / DocTemplate
 const DocTemplate = React.forwardRef((props, ref) => {
     return (
         <div ref={ref} style={styles.container}>
-            {CLOs.map(clo => {
-                const assessmentGroupsMap = {};
-                clo.weights.forEach(w => {
-                    const aId = w.assessmentId;
-                    if (!assessmentGroupsMap[aId]) {
-                        assessmentGroupsMap[aId] = {
-                            id: aId,
-                            name: w.assessment?.name,
-                            totalWeight: 0,
-                            weights: []
-                        };
-                    }
-                    assessmentGroupsMap[aId].weights.push(w);
-                    assessmentGroupsMap[aId].totalWeight += (w.weight || 0);
-                });
-
-                const assessmentGroups = Object.values(assessmentGroupsMap).sort((a, b) => a.id - b.id);
-                const maxScoreTotal = assessmentGroups.reduce((acc, g) => acc + g.totalWeight, 0);
-
-                const studentResults = students.map(student => {
-                    let totalScore = 0;
-                    clo.weights.forEach(w => {
-                        const scoreRecord = student.scores.find(s => s.weightId === w.id);
-                        totalScore += parseInt(scoreRecord?.value || '0');
-                    });
-                    const isPass = totalScore / maxScoreTotal >= passThreshold / 100;
-                    return { totalScore, isPass };
-                });
-
-                const totalStudents = studentResults.length;
-                const passCount = studentResults.filter(r => r.isPass).length;
-                const failCount = totalStudents - passCount;
-                const passPercentage = ((passCount / totalStudents) * 100).toFixed(0);
-                const failPercentage = ((failCount / totalStudents) * 100).toFixed(0);
-
-                return (
-                    <div key={clo.id} className="clo-page" style={styles.cloContainer}>
-                        <h3 style={{ color: '#1890ff' }}>{`CLO ${clo.number}: ${clo.statement}`}</h3>
-                        <table style={styles.table}>
-                            <thead>
-                                <tr style={styles.headerRow1}>
-                                    <th rowSpan={2} style={styles.thHeader}>Student Name</th>
-                                    {assessmentGroups.map(group => (
-                                        <th key={group.id} style={styles.th}>{group.name}</th>
-                                    ))}
-                                    <th colSpan={3} style={styles.th}>Total</th>
-                                </tr>
-                                <tr style={styles.headerRow2}>
-                                    {assessmentGroups.map(group => (
-                                        <th key={group.id} style={styles.th}>CLO score<br />({group.totalWeight}%)</th>
-                                    ))}
-                                    <th style={styles.th}>Score Max {maxScoreTotal}</th>
-                                    <th style={styles.th}>Score Max (%)</th>
-                                    <th style={styles.th}>CLO {clo.number} Grade</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {students.map((student, index) => {
-                                    const { totalScore, isPass } = studentResults[index];
-                                    return (
-                                        <tr key={student.id}>
-                                            <td style={styles.td}>{student.khmerName}</td>
-                                            {assessmentGroups.map(group => {
-                                                let groupScore = 0;
-                                                group.weights.forEach(w => {
-                                                    const scoreRecord = student.scores.find(s => s.weightId === w.id);
-                                                    groupScore += parseInt(scoreRecord?.value || '0');
-                                                });
-                                                const groupPass = groupScore >= (group.totalWeight / 2);
-                                                return (
-                                                    <td key={group.id} style={{
-                                                        ...styles.tdCenter,
-                                                        ...(groupPass ? styles.bgGreen : styles.bgRed),
-                                                        ...(groupPass ? styles.textGreen : styles.textRed),
-                                                    }}>{groupScore}</td>
-                                                );
-                                            })}
-                                            <td style={styles.tdCenter}>{totalScore}</td>
-                                            <td style={{ ...styles.tdCenter, ...(isPass ? styles.bgGreen : styles.bgRed) }}>
-                                                {((totalScore / maxScoreTotal) * 100).toFixed(0)}%
-                                            </td>
-                                            <td style={{ ...styles.tdCenter, ...styles.bgLightGreen }}>
-                                                {(() => {
-                                                    const pct = (totalScore / maxScoreTotal) * 100;
-                                                    if (pct >= 85) return 'A'; if (pct >= 80) return 'B+'; if (pct >= 70) return 'B';
-                                                    if (pct >= 65) return 'C+'; if (pct >= 50) return 'C'; if (pct >= 45) return 'D';
-                                                    if (pct >= 40) return 'E'; return 'F';
-                                                })()}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                            <tfoot>
-                                <tr>
-                                    <td colSpan={1 + assessmentGroups.length} rowSpan={4} style={styles.tdNoBorder}></td>
-                                    <td style={styles.td}># Fail</td>
-                                    <td style={styles.tdCenter}>{failCount}</td>
-                                    <td rowSpan={3} style={styles.tdVerticalMiddle}>Avg. CLO Pass/Fail</td>
-                                </tr>
-                                <tr>
-                                    <td style={styles.td}># Pass</td>
-                                    <td style={styles.tdCenter}>{passCount}</td>
-                                </tr>
-                                <tr>
-                                    <td style={styles.td}>Fail %</td>
-                                    <td style={styles.tdCenter}>{failPercentage}%</td>
-                                </tr>
-                                <tr style={styles.footerBold}>
-                                    <td style={{ ...styles.td, ...styles.bgYellow }}>Pass %</td>
-                                    <td style={{ ...styles.tdCenter, ...styles.bgYellow }}>{passPercentage}%</td>
-                                    <td style={styles.tdCenter}>{passThreshold}%</td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                        <br clear="all" style={{ pageBreakBefore: 'always' }} />
-                    </div>
-                );
-            })}
+            <SummaryTable />
+            {CLOs.map(clo => (
+                <CLOTable key={clo.id} clo={clo} />
+            ))}
         </div>
     );
 });
 
-// 5. Main App Controller
 const App = () => {
     const docRef = useRef(null);
 
@@ -201,7 +305,7 @@ const App = () => {
     };
 
     return (
-        <div style={{ background: '#f5f5f5', minHeight: '100vh', padding: '20px' }}>
+        <div>
             <button onClick={download} style={{ background: '#1890ff', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '4px', cursor: 'pointer' }}>
                 download
             </button>
