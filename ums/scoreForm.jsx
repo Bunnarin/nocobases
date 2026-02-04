@@ -45,7 +45,7 @@ const assessments = Object.values(weights.reduce((acc, { assessment, CLO, PLO, w
     PLOs: Object.values(assessment.PLOs)
 }));
 
-const SuffixInput = ({ disabled, value, max, weightId, studentId }) => {
+const SuffixInput = ({ disabled, value, max, weightId, studentId, rowIndex, colIndex }) => {
     const [isFocused, setIsFocused] = React.useState(false);
     const timeoutRef = React.useRef(null); // To store the debounce timer
 
@@ -91,6 +91,23 @@ const SuffixInput = ({ disabled, value, max, weightId, studentId }) => {
         }, 1000);
     };
 
+    const handleKeyDown = (e) => {
+        let r = rowIndex;
+        let c = colIndex;
+        if (e.key === 'Enter' || e.key === 'ArrowDown') r++;
+        else if (e.key === 'ArrowUp') r--;
+        else if (e.key === 'ArrowRight') c++;
+        else if (e.key === 'ArrowLeft') c--;
+        else return;
+
+        const next = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+        if (next) {
+            e.preventDefault();
+            next.focus();
+            next.select();
+        }
+    };
+
     return (
         <div style={{ position: 'relative', display: 'inline-block' }}>
             <input
@@ -99,10 +116,16 @@ const SuffixInput = ({ disabled, value, max, weightId, studentId }) => {
                 max={max}
                 step="1"
                 disabled={disabled}
+                data-row={rowIndex}
+                data-col={colIndex}
                 title={disabled ? 'you cannot change after 1 month' : ''}
                 defaultValue={value}
                 onChange={handleChange}
-                onFocus={() => setIsFocused(true)}
+                onKeyDown={handleKeyDown}
+                onFocus={(e) => {
+                    setIsFocused(true);
+                    e.target.select();
+                }}
                 onBlur={() => setIsFocused(false)}
                 style={{
                     border: 'none',
@@ -127,78 +150,84 @@ const SuffixInput = ({ disabled, value, max, weightId, studentId }) => {
     );
 }
 
-const App = () => (
-    <table style={{ fontFamily: 'Khmer OS Battambang', borderCollapse: 'collapse', width: '100%' }}>
-        <thead>
-            {/* Header Row 1: Assessment Name */}
-            <tr style={{ backgroundColor: '#f2f2f2' }}>
-                <th rowSpan={3} style={{ border: '1px solid black' }}>សិស្ស</th>
-                {assessments.map(assessment => {
-                    // Total CLOs across all PLOs in this assessment
-                    const totalClos = assessment.PLOs.reduce((sum, plo) => sum + plo.CLOs.length, 0);
-                    return (
-                        <th key={assessment.name} colSpan={totalClos} style={{ border: '1px solid black' }}>
-                            {assessment.name}
-                        </th>
-                    );
-                })}
-            </tr>
+const App = () => {
+    const allClos = assessments.flatMap(assessment =>
+        assessment.PLOs.flatMap(plo =>
+            plo.CLOs.map(clo => ({ ...clo, assessmentName: assessment.name }))
+        )
+    );
 
-            {/* Header Row 2: PLO under Assessment */}
-            <tr style={{ backgroundColor: '#e9ecef' }}>
-                {assessments.map(assessment =>
-                    assessment.PLOs.map(plo => (
-                        <th key={plo.id} title={plo.statement} colSpan={plo.CLOs.length} style={{ border: '1px solid black' }}>
-                            {plo.number ? `PLO ${plo.number}` : ''}
-                        </th>
-                    ))
-                )}
-            </tr>
+    return (
+        <table style={{ fontFamily: 'Khmer OS Battambang', borderCollapse: 'collapse', width: '100%' }}>
+            <thead>
+                {/* Header Row 1: Assessment Name */}
+                <tr style={{ backgroundColor: '#f2f2f2' }}>
+                    <th rowSpan={3} style={{ border: '1px solid black' }}>សិស្ស</th>
+                    {assessments.map(assessment => {
+                        // Total CLOs across all PLOs in this assessment
+                        const totalClos = assessment.PLOs.reduce((sum, plo) => sum + plo.CLOs.length, 0);
+                        return (
+                            <th key={assessment.name} colSpan={totalClos} style={{ border: '1px solid black' }}>
+                                {assessment.name}
+                            </th>
+                        );
+                    })}
+                </tr>
 
-            {/* Header Row 3: CLOs under each PLO */}
-            <tr style={{ backgroundColor: '#f2f2f2' }}>
-                {assessments.map(assessment =>
-                    assessment.PLOs.map(plo =>
-                        plo.CLOs.map(clo => (
-                            <th key={clo.weightId} title={clo.statement} style={{ border: '1px solid black' }}>
-                                {clo.number ? `CLO ${clo.number}` : ''}
+                {/* Header Row 2: PLO under Assessment */}
+                <tr style={{ backgroundColor: '#e9ecef' }}>
+                    {assessments.map(assessment =>
+                        assessment.PLOs.map(plo => (
+                            <th key={plo.id} title={plo.statement} colSpan={plo.CLOs.length} style={{ border: '1px solid black' }}>
+                                {plo.number ? `PLO ${plo.number}` : ''}
                             </th>
                         ))
-                    )
-                )}
-            </tr>
-        </thead>
+                    )}
+                </tr>
 
-        <tbody>
-            {students.map(student => (
-                <tr key={student.id}>
-                    <td style={{ border: '1px solid black', padding: '8px' }}>
-                        {student.khmerName}
-                    </td>
+                {/* Header Row 3: CLOs under each PLO */}
+                <tr style={{ backgroundColor: '#f2f2f2' }}>
                     {assessments.map(assessment =>
                         assessment.PLOs.map(plo =>
-                            plo.CLOs.map(clo => {
-                                const originalScore = student.scores.find(s =>
-                                    s.weightId === clo.weightId && s.studentId === student.id
-                                );
-                                return (
-                                    <td key={`${student.id}-${clo.weightId}`} style={{ border: '1px solid black', textAlign: 'center' }}>
-                                        <SuffixInput
-                                            max={clo.weight}
-                                            value={originalScore?.value ?? ''}
-                                            studentId={student.id}
-                                            weightId={clo.weightId}
-                                            disabled={isExpired(originalScore?.createdAt)}
-                                        />
-                                    </td>
-                                );
-                            })
+                            plo.CLOs.map(clo => (
+                                <th key={clo.weightId} title={clo.statement} style={{ border: '1px solid black' }}>
+                                    {clo.number ? `CLO ${clo.number}` : ''}
+                                </th>
+                            ))
                         )
                     )}
                 </tr>
-            ))}
-        </tbody>
-    </table>
-);
+            </thead>
+
+            <tbody>
+                {students.map((student, rowIndex) => (
+                    <tr key={student.id}>
+                        <td style={{ border: '1px solid black', padding: '8px' }}>
+                            {student.khmerName}
+                        </td>
+                        {allClos.map((clo, colIndex) => {
+                            const originalScore = student.scores.find(s =>
+                                s.weightId === clo.weightId && s.studentId === student.id
+                            );
+                            return (
+                                <td key={`${student.id}-${clo.weightId}`} style={{ border: '1px solid black', textAlign: 'center' }}>
+                                    <SuffixInput
+                                        max={clo.weight}
+                                        value={originalScore?.value ?? ''}
+                                        studentId={student.id}
+                                        weightId={clo.weightId}
+                                        rowIndex={rowIndex}
+                                        colIndex={colIndex}
+                                        disabled={isExpired(originalScore?.createdAt)}
+                                    />
+                                </td>
+                            );
+                        })}
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+    );
+};
 
 ctx.render(<App />);

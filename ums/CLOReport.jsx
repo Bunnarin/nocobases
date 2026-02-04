@@ -122,19 +122,11 @@ const SummaryTable = () => {
                     <tr>
                         <td colSpan={2 + summaryCLOs.length} rowSpan={4} style={styles.tdNoBorder}></td>
                         <td style={styles.td}># Fail</td>
-                        <td style={styles.tdCenter}>{summaryFailCount}</td>
+                        <td style={styles.tdCenter}>{summaryFailCount} ({summaryFailPct}%)</td>
                     </tr>
                     <tr>
                         <td style={styles.td}># Pass</td>
-                        <td style={styles.tdCenter}>{summaryPassCount}</td>
-                    </tr>
-                    <tr>
-                        <td style={styles.td}>% Fail</td>
-                        <td style={styles.tdCenter}>{summaryFailPct}%</td>
-                    </tr>
-                    <tr>
-                        <td style={styles.td}>% Pass</td>
-                        <td style={styles.tdCenter}>{summaryPassPct}%</td>
+                        <td style={styles.tdCenter}>{summaryPassCount} ({summaryPassPct}%)</td>
                     </tr>
                 </tfoot>
             </table>
@@ -193,11 +185,11 @@ const CLOTable = ({ clo }) => {
                     </tr>
                     <tr style={styles.headerRow2}>
                         {assessmentGroups.map(group => (
-                            <th key={group.id} style={styles.th}>CLO score<br />({group.totalWeight}%)</th>
+                            <th key={group.id} style={styles.th}>max {group.totalWeight}</th>
                         ))}
-                        <th style={styles.th}>Score Max {maxScoreTotal}</th>
-                        <th style={styles.th}>Score Max (%)</th>
-                        <th style={styles.th}>CLO {clo.number} Grade</th>
+                        <th style={styles.th}>max {maxScoreTotal}</th>
+                        <th style={styles.th}>100%</th>
+                        <th style={styles.th}>Grade</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -240,23 +232,15 @@ const CLOTable = ({ clo }) => {
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colSpan={1 + assessmentGroups.length} rowSpan={4} style={styles.tdNoBorder}></td>
-                        <td style={styles.td}># Fail</td>
-                        <td style={styles.tdCenter}>{failCount}</td>
-                        <td rowSpan={3} style={styles.tdVerticalMiddle}>Avg. CLO Pass/Fail</td>
+                        <td colSpan={2 + assessmentGroups.length} rowSpan={4} style={styles.tdNoBorder}></td>
+                        <td style={styles.td}>Fail</td>
+                        <td style={styles.tdCenter}>{failCount} ({failPercentage}%)</td>
+                        <td style={styles.td}>Avg. CLO achieved</td>
                     </tr>
                     <tr>
-                        <td style={styles.td}># Pass</td>
-                        <td style={styles.tdCenter}>{passCount}</td>
-                    </tr>
-                    <tr>
-                        <td style={styles.td}>Fail %</td>
-                        <td style={styles.tdCenter}>{failPercentage}%</td>
-                    </tr>
-                    <tr style={styles.footerBold}>
-                        <td style={{ ...styles.td, ...styles.bgYellow }}>Pass %</td>
-                        <td style={{ ...styles.tdCenter, ...styles.bgYellow }}>{passPercentage}%</td>
-                        <td style={styles.tdCenter}>{passThreshold}%</td>
+                        <td style={styles.td}>Pass</td>
+                        <td style={styles.tdCenter}>{passCount} ({passPercentage}%)</td>
+                        <td style={styles.tdCenter}>{passPercentage >= passThreshold ? 'yes' : 'no'}</td>
                     </tr>
                 </tfoot>
             </table>
