@@ -2,7 +2,7 @@ const { data: { data: [semester] } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         pageSize: 1,
-        sort: 'startDate'
+        sort: '-startDate'
     },
 });
 const { data: { data: portfolios } } = await ctx.api.request({
@@ -10,6 +10,7 @@ const { data: { data: portfolios } } = await ctx.api.request({
     params: {
         'appends[]': 'files',
         filter: {
+            semesterId: semester.id,
             courseId: ctx.value
         }
     }
@@ -20,8 +21,11 @@ const { data: { data: criterias } } = await ctx.api.request({
 
 const FILE_COLOR = {
     '.docx': '#2b579a',
+    '.doc': '#2b579a',
     '.xlsx': '#217346',
+    '.xls': '#217346',
     '.pptx': '#d24726',
+    '.ppt': '#d24726',
     '.pdf': '#ff0000'
 };
 
@@ -31,27 +35,23 @@ const { useState } = React;
 const PortfolioTable = () => {
     const [loading, setLoading] = useState({});
 
-    const handleUpload = async (criteriaId, event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-
+    const handleUpload = async (criteriaId, e) => {
         setLoading(prev => ({ ...prev, [criteriaId]: true }));
+        const newFileIds = [];
+        for (const file of e.target.files) {
 
-        // Step 1: Create the attachment record
-        // Since FormData constructor is blocked, we pass the file in 'data'
-        // Many axios-based requesters (like ctx.api) handle this automatically
-        const attachRes = await ctx.api.request({
-            url: 'file:create',
-            method: 'POST',
-            data: { file },
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
-
-        const newFileId = attachRes.data?.data?.id;
-
+            // Step 1: Create the attachment record
+            // Since FormData constructor is blocked, we pass the file in 'data'
+            // Many axios-based requesters (like ctx.api) handle this automatically
+            await ctx.api.request({
+                url: 'file:create',
+                method: 'POST',
+                data: { file },
+                headers: { 'Content-Type': 'multipart/form-data' }
+            }).then(({ data }) => newFileIds.push({ id: data.data.id }));
+        }
         // Step 2: Update or Create the Portfolio record
         const existing = portfolios.find(p => p.criteriaId === criteriaId);
-
         if (existing)
             await ctx.api.request({
                 url: `coursePortfolio:update`,
@@ -60,7 +60,7 @@ const PortfolioTable = () => {
                     filterByTk: existing.id
                 },
                 data: {
-                    files: [...existing.files?.map(({ id }) => ({ id })), newFileId]
+                    files: [...existing.files, ...newFileIds]
                 }
             });
         else
@@ -71,11 +71,10 @@ const PortfolioTable = () => {
                     course: ctx.value,
                     criteria: criteriaId,
                     semester: semester.id,
-                    files: [{ id: newFileId }]
+                    files: newFileIds
                 }
             });
         window.location.reload();
-        setLoading(prev => ({ ...prev, [criteriaId]: false }));
     };
 
     return (
@@ -98,6 +97,7 @@ const PortfolioTable = () => {
                                 <label style={{ ...styles.uploadBtn, backgroundColor: hasFiles ? '#1890ff' : '#ff4d4f' }}>
                                     {loading[crit.id] ? '...' : 'Upload'}
                                     <input
+                                        multiple
                                         type="file"
                                         style={{ display: 'none' }}
                                         accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
@@ -109,19 +109,16 @@ const PortfolioTable = () => {
 
                             <td style={styles.td}>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-                                    {hasFiles ? (
-                                        portfolio.files.map(f => (
-                                            <div key={f.id} style={styles.fileWrapper}>
-                                                <div style={{ ...styles.fileBlock, color: '#ffffff', backgroundColor: FILE_COLOR[f.extname] }}>
-                                                    {f.extname.slice(1)}
-                                                </div>
-                                                {f.filename}
+                                    {portfolio?.files.map(f => (
+                                        <div key={f.id} style={styles.fileWrapper}>
+                                            <div
+                                                onClick={() => window.open(f.url, '_blank')}
+                                                style={{ ...styles.fileBlock, color: '#ffffff', backgroundColor: FILE_COLOR[f.extname] }}>
+                                                {f.extname.slice(1)}
                                             </div>
-                                        )
-                                        )
-                                    ) : (
-                                        <span style={{ color: '#bfbfbf', fontSize: '12px' }}>No files uploaded</span>
-                                    )}
+                                            {f.filename}
+                                        </div>
+                                    ))}
                                 </div>
                             </td>
                         </tr>

@@ -1,15 +1,34 @@
-const { data: { data: { CLOs, weights: oldWeights } } } = await ctx.api.request({
+const { data: { data: { programId, CLOs, weights: oldWeights } } } = await ctx.api.request({
     url: 'course:get',
     params: {
         filterByTk: ctx.value,
-        appends: 'weights,CLOs,CLOs.assessments,CLOs.PLOs'
+        appends: 'weights,CLOs'
     },
 });
 
+let { data: { data: PLOs } } = await ctx.api.request({
+    url: 'PLO:list',
+});
+
+// restrict PLO if has programId
+const specificPLOs = PLOs.filter(p => p.programId == programId);
+if (specificPLOs.length > 0)
+    PLOs = specificPLOs;
+else // use the default PLOs
+    PLOs = PLOs.filter(p => p.programId == null);
+
+const { data: { data: assessments } } = await ctx.api.request({
+    url: 'assessment:list',
+});
+
 const { React } = ctx.libs;
+const { useState } = React;
+const { Select } = ctx.libs.antd;
+
+const weightToDetach = [];
 
 const App = () => {
-    const [weights, setWeights] = React.useState(oldWeights);
+    const [weights, setWeights] = useState(oldWeights);
 
     const onSubmit = async (e) => {
         let totalWeight = 0;
@@ -21,6 +40,19 @@ const App = () => {
             e.target.textContent = 'click again to submit';
             return ctx.message.error('after this, you cannot make any further changes. click again to submit');
         }
+
+        // detach weights
+        for (const weightId of weightToDetach)
+            ctx.api.request({
+                url: 'weight:update',
+                method: 'POST',
+                params: {
+                    filterByTk: weightId
+                },
+                data: {
+                    courseId: null
+                }
+            });
 
         const currentWeights = [...weights];
         for (let i = 0; i < currentWeights.length; i++) {
@@ -66,23 +98,12 @@ const App = () => {
 
     const removeWeight = (weightId) => {
         setWeights(prev => prev.filter(w => w.id !== weightId));
-        // detach it from course
-        ctx.api.request({
-            url: 'weight:update',
-            method: 'POST',
-            params: {
-                filterByTk: weightId
-            },
-            data: {
-                courseId: null
-            }
-        });
+        weightToDetach.push(weightId);
     }
 
     const updateWeight = (weightId, key, value) =>
         setWeights(prev => prev.map(w =>
             w.id != weightId ? w : { ...w, [key]: parseInt(value) }
-            // the id and weight will always be int
         ));
 
     return (
@@ -91,9 +112,8 @@ const App = () => {
                 table { width: 100%; border-collapse: collapse; }
                 th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
                 th { background-color: #f5f5f5; }
-                select, input { width: 100%; padding: 6px; }
+                .ant-select, input { width: 100% !important; }
                 input { width: 70%; padding: 6px; }
-                select:disabled { background-color: #f9f9f9; color: #666; cursor: not-allowed; }
                 .btn-add { color: #007bff; border: none; background: none; cursor: pointer; font-weight: bold; }
             `}</style>
 
@@ -127,14 +147,26 @@ const App = () => {
                             // Logic: Is this row fully "configured"?
                             const isLocked = w.PLOId && w.assessmentId;
 
-                            // Restriction logic: Find assessments already used for THIS CLO + THIS PLO
+                            // Uniqueness logic:
+                            // Filter assessments already used for THIS CLO + THIS PLO
                             const usedAssessmentIds = weights
                                 .filter(other =>
                                     other.CLOId === clo.id &&
                                     other.PLOId === w.PLOId &&
-                                    other.id !== w.id // Don't filter out the current row's selection
+                                    other.id !== w.id &&
+                                    w.PLOId // Only filter if PLO is selected
                                 )
                                 .map(other => parseInt(other.assessmentId));
+
+                            // Filter PLOs already used for THIS CLO + THIS Assessment
+                            const usedPLOIds = weights
+                                .filter(other =>
+                                    other.CLOId === clo.id &&
+                                    other.assessmentId === w.assessmentId &&
+                                    other.id !== w.id &&
+                                    w.assessmentId // Only filter if Assessment is selected
+                                )
+                                .map(other => parseInt(other.PLOId));
 
                             return (
                                 <tr key={w.id}>
@@ -146,33 +178,34 @@ const App = () => {
                                         </td>
                                     )}
                                     <td>
-                                        <select
-                                            required
-                                            value={w.PLOId}
+                                        <Select
+                                            showSearch
+                                            placeholder="Select PLO"
+                                            optionFilterProp="label"
+                                            value={w.PLOId || undefined}
                                             disabled={isLocked}
-                                            onChange={(e) => updateWeight(w.id, 'PLOId', e.target.value)}
-                                        >
-                                            <option value="">Select PLO</option>
-                                            {clo.PLOs.map(plo => (
-                                                <option key={plo.id} value={plo.id}>PLO {plo.number}</option>
-                                            ))}
-                                        </select>
+                                            onChange={(val) => updateWeight(w.id, 'PLOId', val)}
+                                            style={{ width: '100%' }}
+                                            options={PLOs
+                                                .filter(p => !usedPLOIds.includes(p.id))
+                                                .map(p => ({ label: `PLO ${p.number}`, value: p.id }))
+                                            }
+                                        />
                                     </td>
                                     <td>
-                                        <select
-                                            required
-                                            value={w.assessmentId}
+                                        <Select
+                                            showSearch
+                                            placeholder="Select Assessment"
+                                            optionFilterProp="label"
+                                            value={w.assessmentId || undefined}
                                             disabled={!w.PLOId || isLocked}
-                                            onChange={(e) => updateWeight(w.id, 'assessmentId', e.target.value)}
-                                        >
-                                            <option value="">Select Assessment</option>
-                                            {clo.assessments
-                                                .filter(a => !usedAssessmentIds.includes(a.id)) // Hide already used pairs
-                                                .map(a => (
-                                                    <option key={a.id} value={a.id}>{a.name}</option>
-                                                ))
+                                            onChange={(val) => updateWeight(w.id, 'assessmentId', val)}
+                                            style={{ width: '100%' }}
+                                            options={assessments
+                                                .filter(a => !usedAssessmentIds.includes(a.id))
+                                                .map(a => ({ label: a.name, value: a.id }))
                                             }
-                                        </select>
+                                        />
                                     </td>
                                     <td>
                                         <input
