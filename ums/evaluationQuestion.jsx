@@ -1,11 +1,26 @@
 const { React } = ctx.libs;
 
+// get config, see if we're allowed to make change during this period
+// this KV table has a key val pair. it's is ISOstring that tells us the last date that we're allowed to make change
+let deadlinePassed = true;
+await ctx.api.request({
+  url: 'KV:get',
+  params: {
+    filterByTk: 'evaluationDeadline'
+  },
+}).then(({ data }) => {
+  if (data?.data?.value)
+    deadlinePassed = new Date(data.data.value) < new Date();
+});
+
 const { data: { data: questions } } = await ctx.api.request({
   url: 'evaluationQuestion:list',
 });
 
 const handleSubmit = async (e) => {
   e.preventDefault();
+  if (deadlinePassed)
+    return ctx.message.error('Deadline has passed. You cannot submit changes.');
   const form = e.target;
   if (!form.checkValidity()) return;
 
@@ -45,6 +60,21 @@ const handleSubmit = async (e) => {
 const App = () =>
 (
   <form onSubmit={handleSubmit} style={containerStyle}>
+    {deadlinePassed &&
+      <div style={{
+        position: 'absolute',
+        top: '0',
+        left: '0',
+        right: '0',
+        bottom: '0',
+        background: 'rgba(255, 255, 255, 0.5)',
+        zIndex: '1000',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'not-allowed',
+      }}></div>
+    }
     {questions.map((field, index) => (
       <div key={index} style={fieldGroupStyle}>
         <label style={labelStyle}>

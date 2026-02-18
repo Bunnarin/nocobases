@@ -167,8 +167,16 @@ const App = () => {
                         // Total CLOs across all PLOs in this assessment
                         const totalClos = assessment.PLOs.reduce((sum, plo) => sum + plo.CLOs.length, 0);
                         return (
-                            <th key={assessment.name} colSpan={totalClos} style={{ border: '1px solid black' }}>
-                                {assessment.name}
+                            <th key={assessment.name} title={assessment.name} colSpan={totalClos} style={{ border: '1px solid black', padding: '4px' }}>
+                                <div style={{
+                                    maxWidth: totalClos * 80 + 'px',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                    margin: '0 auto'
+                                }}>
+                                    {assessment.name}
+                                </div>
                             </th>
                         );
                     })}

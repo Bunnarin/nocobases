@@ -1,5 +1,6 @@
 const { React } = ctx.libs;
 const { useRef } = React;
+const { Button } = ctx.libs.antd;
 
 // 1. Data Fetching
 const { data: { data: schedule } } = await ctx.api.request({
@@ -12,7 +13,8 @@ const { data: { data: schedule } } = await ctx.api.request({
 
 const { passThreshold } = schedule.course.program;
 const { students } = schedule.class;
-const { weights, credit } = schedule.course;
+const { weights, theoryCredit, practiceCredit } = schedule.course;
+const credit = theoryCredit + practiceCredit;
 
 // 2. Logic: Group weights by PLO
 const plosMap = {};
@@ -91,8 +93,8 @@ const PLOTable = ({ plo, students, passThreshold, credit }) => {
             <table style={styles.table}>
                 <thead>
                     <tr style={styles.headerRow1}>
-                        <th rowSpan={2} style={styles.thHeader}>id</th>
-                        <th rowSpan={2} style={styles.thHeader}>name</th>
+                        <th rowSpan={2} style={styles.thHeader}>ID</th>
+                        <th rowSpan={2} style={styles.thHeader}>Name</th>
                         {ploCLOs.map(clo => (
                             <th key={clo.id} style={styles.th}>CLO {clo.number}</th>
                         ))}
@@ -126,7 +128,7 @@ const PLOTable = ({ plo, students, passThreshold, credit }) => {
                             {res.cloScores.map((score, i) => (
                                 <td key={i} style={styles.tdCenter}>{score}</td>
                             ))}
-                            <td style={styles.tdCenter}>{res.ploTotalScore.toFixed(2)}</td>
+                            <td style={styles.tdCenter}>{res.ploTotalScore}</td>
                             <td style={{
                                 ...styles.tdCenter,
                                 ...(res.isPass ? styles.bgGreen : styles.bgRed)
@@ -198,14 +200,10 @@ const App = () => {
         element.click();
     };
 
-    return (
-        <div>
-            <button onClick={download} style={{ background: '#1890ff', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '4px', cursor: 'pointer' }}>
-                download
-            </button>
-            <DocTemplate ref={docRef} />
-        </div>
-    );
+    return (<>
+        <Button type="primary" onClick={download}>download</Button>
+        <DocTemplate ref={docRef} />
+    </>);
 };
 
 ctx.render(<App />);

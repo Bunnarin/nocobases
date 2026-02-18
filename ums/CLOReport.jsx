@@ -1,4 +1,5 @@
 const { React } = ctx.libs;
+const { Button } = ctx.libs.antd;
 const { useRef } = React;
 
 // 1. Data Fetching
@@ -82,24 +83,24 @@ const SummaryTable = () => {
             <table style={styles.table}>
                 <thead>
                     <tr style={styles.headerRow1}>
-                        <th style={styles.thHeader}>Student ID</th>
-                        <th style={styles.thHeader}>Student Name</th>
+                        <th style={styles.thHeader}>ID</th>
+                        <th style={styles.thHeader}>Name</th>
                         {summaryCLOs.map(clo => (
                             <th key={clo.id} style={styles.th}>
                                 CLO {clo.number}<br />({clo.totalWeight})
                             </th>
                         ))}
                         <th style={styles.th}>Total Marks<br />(100)</th>
-                        <th style={styles.th}>Course<br />Grade</th>
+                        <th style={styles.th}>Grade</th>
                     </tr>
                 </thead>
                 <tbody>
                     {summaryStudents.map((item, idx) => (
                         <tr key={item.student.id}>
-                            <td style={styles.td}>{item.student.code || item.student.id}</td>
-                            <td style={styles.td}>{item.student.khmerName || item.student.name}</td>
+                            <td style={styles.td}>{item.student.id}</td>
+                            <td style={styles.td}>{item.student.khmerName}</td>
                             {item.cloScores.map((score, i) => (
-                                <td key={i} style={styles.tdCenter}>{score.toFixed(0)}</td>
+                                <td key={i} style={styles.tdCenter}>{score}</td>
                             ))}
                             <td style={{
                                 ...styles.tdCenter,
@@ -211,10 +212,10 @@ const CLOTable = ({ clo }) => {
                                             ...styles.tdCenter,
                                             ...(groupPass ? styles.bgGreen : styles.bgRed),
                                             ...(groupPass ? styles.textGreen : styles.textRed),
-                                        }}>{groupScore.toFixed(0)}</td>
+                                        }}>{groupScore}</td>
                                     );
                                 })}
-                                <td style={styles.tdCenter}>{totalScore.toFixed(0)}</td>
+                                <td style={styles.tdCenter}>{totalScore}</td>
                                 <td style={{ ...styles.tdCenter, ...(isPass ? styles.bgGreen : styles.bgRed) }}>
                                     {maxScoreTotal > 0 ? ((totalScore / maxScoreTotal) * 100).toFixed(0) : 0}%
                                 </td>
@@ -288,14 +289,10 @@ const App = () => {
         element.click();
     };
 
-    return (
-        <div>
-            <button onClick={download} style={{ background: '#1890ff', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '4px', cursor: 'pointer' }}>
-                download
-            </button>
-            <DocTemplate ref={docRef} />
-        </div>
-    );
+    return (<>
+        <Button type="primary" onClick={download}>download</Button>
+        <DocTemplate ref={docRef} />
+    </>);
 };
 
 ctx.render(<App />);
