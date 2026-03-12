@@ -11,9 +11,9 @@ mkdir -p $LOCAL_BACKUP_DIR
 mkdir -p $PROJECT_DIR/log
 touch $LOG_FILE
 
-FINAL_FILE="$LOCAL_BACKUP_DIR/$TIMESTAMP.sql.br"
+FINAL_FILE="$LOCAL_BACKUP_DIR/$TIMESTAMP.dump.br"
 
-pg_dump -U postgres -h localhost -d lms -Z 0 | brotli --best > "$FINAL_FILE"
+pg_dump -Fc lms | brotli --best > "$FINAL_FILE"
 
 if [ $? -ne 0 ]; then
     echo "$(date): dump FAILED." >> $LOG_FILE

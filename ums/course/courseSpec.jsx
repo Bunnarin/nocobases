@@ -8,7 +8,7 @@ await ctx.api.request({
     },
 }).then(({ data }) => {
     if (data?.data?.value)
-        deadlinePassed = new Date(data.data.value) < new Date();
+        deadlinePassed = new Date(data.data.value) <= new Date();
 });
 
 const { data: { data: { programId, CLOs, weights: oldWeights } } } = await ctx.api.request({
@@ -101,6 +101,7 @@ const App = () => {
                     data: {
                         number: clo.number,
                         statement: clo.statement,
+                        khmerStatement: clo.khmerStatement,
                         course: ctx.value
                     }
                 }).then(({ data }) => cloIdMap[clo.id] = data.data.id);
@@ -109,7 +110,10 @@ const App = () => {
                     url: 'CLO:update',
                     method: 'POST',
                     params: { filterByTk: clo.id },
-                    data: { statement: clo.statement }
+                    data: {
+                        statement: clo.statement,
+                        khmerStatement: clo.khmerStatement
+                    }
                 });
         }
 
@@ -216,7 +220,6 @@ const App = () => {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                cursor: not-allowed;
             }
         `}</style>
 
@@ -228,7 +231,8 @@ const App = () => {
             <thead>
                 <tr>
                     <th>CLO</th>
-                    <th>Statement</th>
+                    <th>EN Statement</th>
+                    <th>KH Statement</th>
                     <th>PLO</th>
                     <th>Assessment</th>
                     <th>Weight (%)</th>
@@ -246,17 +250,23 @@ const App = () => {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                                         CLO {clo.number}
                                         <Button onClick={() => addWeight(clo.id)}>➕</Button>
-                                        <Button danger onClick={() => removeCLO(clo.id)}>✕</Button>
                                     </div>
                                 </td>
                                 <td>
                                     <textarea
-                                        placeholder="Enter CLO statement..."
+                                        placeholder="english statement..."
                                         value={clo.statement}
                                         onChange={(e) => updateCLO(clo.id, 'statement', e.target.value)}
                                     />
                                 </td>
-                                <td colSpan="4" style={{ color: '#999' }}>No weights assigned</td>
+                                <td>
+                                    <textarea
+                                        placeholder="khmer statement..."
+                                        value={clo.khmerStatement}
+                                        onChange={(e) => updateCLO(clo.id, 'khmerStatement', e.target.value)}
+                                    />
+                                </td>
+                                <td colSpan="4">No weights assigned</td>
                             </tr>
                         );
 
@@ -291,7 +301,6 @@ const App = () => {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                                             CLO {clo.number}
                                             <Button onClick={() => addWeight(clo.id)}>➕</Button>
-                                            <Button danger onClick={() => removeCLO(clo.id)}>✕</Button>
                                         </div>
                                     </td>
                                     <td rowSpan={cloWeights.length}>
@@ -299,6 +308,13 @@ const App = () => {
                                             placeholder="Enter CLO statement..."
                                             value={clo.statement}
                                             onChange={(e) => updateCLO(clo.id, 'statement', e.target.value)}
+                                        />
+                                    </td>
+                                    <td rowSpan={cloWeights.length}>
+                                        <textarea
+                                            placeholder="khmer statement..."
+                                            value={clo.khmerStatement}
+                                            onChange={(e) => updateCLO(clo.id, 'khmerStatement', e.target.value)}
                                         />
                                     </td>
                                 </>)}

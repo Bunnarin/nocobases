@@ -1,10 +1,11 @@
-const { data: { data: [semester] } } = await ctx.api.request({
+let { data: { data: [semester] } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         pageSize: 1,
         sort: '-startDate'
     },
 });
+
 const { data: { data: portfolios } } = await ctx.api.request({
     url: 'coursePortfolio:list',
     params: {
@@ -77,8 +78,9 @@ const PortfolioTable = () => {
         window.location.reload();
     };
 
-    return (
-        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff' }}>
+    return (<>
+        <h1>{semester.startYear}-{(semester.startYear + 1) % 100} - ឆមាសទី {semester.number}</h1>
+        <table>
             <thead>
                 <tr style={{ backgroundColor: '#fafafa' }}>
                     <th style={styles.th}>Criteria</th>
@@ -126,7 +128,7 @@ const PortfolioTable = () => {
                 })}
             </tbody>
         </table>
-    );
+    </>);
 };
 
 const styles = {

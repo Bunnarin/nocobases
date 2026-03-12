@@ -16,7 +16,7 @@ const { data: { data: schedule } } = await ctx.api.request({
     url: 'schedule:get',
     params: {
         filterByTk: ctx.value,
-        appends: 'class,class.students'
+        appends: 'class.students'
     }
 });
 
@@ -126,7 +126,7 @@ const App = () => {
                         status: state.status,
                         student: s.id,
                         schedule: ctx.value,
-                        class: schedule.courseId,
+                        course: schedule.courseId,
                         comment: state.comment
                     }
                 }).then(({ data }) => newRecord = data.data);
