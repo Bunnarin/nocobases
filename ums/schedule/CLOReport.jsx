@@ -118,7 +118,7 @@ const SummaryTable = () => {
         <table className="header-table" style={{ width: '100%', marginBottom: '20px' }}>
             <tr>
                 <td>
-                    <br /><br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName || program.faculty.name}
+                    <br /><br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}
                 </td>
                 <td></td>
                 <td>
@@ -127,11 +127,11 @@ const SummaryTable = () => {
             </tr>
         </table>
         <p style={{ textAlign: 'center' }}>
-            បញ្ជីរាយនាមនិស្សិត {program.khmerName || program.englishName}
+            បញ្ជីរាយនាមនិស្សិត {program.khmerName}
             <br />
             ឆ្នាំទី{schedule.course.year} ជំនាន់ទី{semester.startYear - program.startYear + 1} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
             <br />
-            {schedule.course.khmerName || schedule.course.englishName} ថ្នាក់ {schedule.class.name}
+            {schedule.course.khmerName} ថ្នាក់ {schedule.class.name}
         </p>
         <div className="clo-page" style={styles.cloContainer}>
             <h3 style={{ color: '#1890ff' }}>Summary Report</h3>
@@ -268,7 +268,7 @@ const CLOTable = ({ clo }) => {
                         return (
                             <tr key={student.id}>
                                 <td style={styles.td}>{student.id}</td>
-                                <td style={styles.td}>{student.khmerName || student.name}</td>
+                                <td style={styles.td}>{student.khmerName}</td>
                                 {assessmentGroups.map(group => {
                                     let groupScore = 0;
                                     group.weights.forEach(w => {

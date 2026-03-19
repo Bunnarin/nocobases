@@ -76,10 +76,28 @@ const SuffixInput = ({ max, value, weightId, studentId, rowIndex, colIndex, onCo
             const originalScore = student.scores?.find(s =>
                 s.weightId == weightId && s.studentId == studentId
             );
-            if (originalScore)
-                ctx.api.request({ url: 'score:update', method: 'POST', params: { filterByTk: originalScore.id }, data: { value: num } });
-            else
-                ctx.api.request({ url: 'score:create', method: 'POST', data: { student: studentId, weight: weightId, course: schedule.course.id, value: num } });
+            if (originalScore) {
+                const updateData = { value: num };
+                const isNotToday = new Date(originalScore.createdAt).toDateString() !== new Date().toDateString();
+                updateData.makeup = originalScore.value < max * 0.5 && isNotToday;
+                ctx.api.request({
+                    url: 'score:update',
+                    method: 'POST',
+                    params: { filterByTk: originalScore.id },
+                    data: updateData
+                });
+            } else {
+                ctx.api.request({
+                    url: 'score:create',
+                    method: 'POST',
+                    data: {
+                        student: studentId,
+                        weight: weightId,
+                        course: schedule.course.id,
+                        value: num
+                    }
+                });
+            }
         }, 1000);
     };
 
@@ -211,15 +229,15 @@ const DocTemplate = React.forwardRef(({ scoreMap }, ref) => (
 
         <table className="header-table" style={{ width: '100%', marginBottom: '20px' }}>
             <tr>
-                <td><br /><br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty?.khmerName || program.faculty?.name}</td>
+                <td><br /><br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty?.khmerName}</td>
                 <td></td>
                 <td>ព្រះរាជាណាចក្រកម្ពុជា<br />ជាតិ សាសនា ព្រះមហាក្សត្រ</td>
             </tr>
         </table>
 
         <p style={{ textAlign: 'center' }}>
-            បញ្ជីរាយនាមនិស្សិត {program.khmerName || program.englishName}
-            <br />{schedule.course.khmerName || schedule.course.englishName} ថ្នាក់ {schedule.class.name}
+            បញ្ជីរាយនាមនិស្សិត {program.khmerName}
+            <br />{schedule.course.khmerName} ថ្នាក់ {schedule.class.name}
         </p>
 
         <table style={{ borderCollapse: 'collapse', width: '100%' }}>

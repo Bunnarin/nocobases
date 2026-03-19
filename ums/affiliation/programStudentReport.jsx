@@ -37,7 +37,7 @@ const { data: { data: students } } = await ctx.api.request({
                 }
             ]
         },
-        appends: 'background,background.province,scholarshipSource,major,classes'
+        appends: 'background,background.province,scholarshipSource,major,classes,user'
     }
 });
 
@@ -63,7 +63,7 @@ const DocTemplate = forwardRef(({ selectedYear }, ref) => (
         <table className="header-table" style={{ width: '100%', marginBottom: '20px' }}>
             <tr>
                 <td>
-                    <br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName || program.faculty.name}
+                    <br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}
                 </td>
                 <td></td>
                 <td>
@@ -72,7 +72,7 @@ const DocTemplate = forwardRef(({ selectedYear }, ref) => (
             </tr>
         </table>
         <p style={{ textAlign: 'center' }}>
-            បញ្ជីរាយនាមនិស្សិត {program.khmerName || program.name}
+            បញ្ជីរាយនាមនិស្សិត {program.khmerName}
             <br />
             ឆ្នាំទី{selectedYear} ជំនាន់ទី{semester.startYear - program.startYear + 1 - selectedYear} ឆ្នាំសិក្សា {semester.startYear} - {semester.startYear + 1}
         </p>
@@ -88,9 +88,10 @@ const DocTemplate = forwardRef(({ selectedYear }, ref) => (
                     <th>ថ្ងៃខែឆ្នាំកំណើត</th>
                     <th>មកពី</th>
                     <th>កម្រិត</th>
-                    <th>ជំនាញ</th>
+                    {programId == 1 && <th>ជំនាញ</th>}
                     <th>ថ្នាក់</th>
                     <th>អាហារូបករណ៍</th>
+                    <th>លេខទូរស័ព្ទ</th>
                 </tr>
             </thead>
             <tbody>
@@ -105,11 +106,12 @@ const DocTemplate = forwardRef(({ selectedYear }, ref) => (
                         <td>{student.birthday}</td>
                         <td>{student.background?.province?.name}</td>
                         <td>{degreeMap[student.major.degree]}</td>
-                        <td>{student.major.abbreviation}</td>
+                        {programId == 1 && <td>{student.major.abbreviation}</td>}
                         <td>{student.classes.find(cls => cls.programId == programId)?.name}</td>
                         <td>
                             {student.scholarshipSource ? student.scholarshipSource.name + (student.scholarshipCoverage < 100 ? student.scholarshipCoverage : '') : 'បង់ថ្លៃ'}
                         </td>
+                        <td>{student.user.phone}</td>
                     </tr>
                 ))}
             </tbody>

@@ -96,7 +96,7 @@ const DocTemplate = forwardRef((props, ref) => (
         <table className="header-table" style={{ width: '100%', marginBottom: '20px' }}>
             <tr>
                 <td>
-                    <br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName || program.faculty.name}
+                    <br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}
                 </td>
                 <td></td>
                 <td>
@@ -106,7 +106,7 @@ const DocTemplate = forwardRef((props, ref) => (
         </table>
         <p style={{ textAlign: 'center' }}>
             លទ្ធផលប្រឡងឆមាសទី {semester.number} និស្សិតឆ្នាំទី {students[0].year} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
-            <br />{program.khmerName || program.name}
+            <br />{program.khmerName}
         </p>
         <table style={styles.table}>
             <thead>
@@ -114,7 +114,7 @@ const DocTemplate = forwardRef((props, ref) => (
                     <th style={styles.th}>ID</th>
                     <th style={styles.th}>ឈ្មោះ</th>
                     {courses.map(course => (
-                        <th style={styles.th}><div style={styles['vertical-text']}>{course.khmerName || course.englishName}</div> <br /> {course.theoryCredit + course.practiceCredit} ({course.theoryCredit},{course.practiceCredit}) </th>
+                        <th style={styles.th}><div style={styles['vertical-text']}>{course.khmerName}</div> <br /> {course.theoryCredit + course.practiceCredit} ({course.theoryCredit},{course.practiceCredit}) </th>
                     ))}
                     <th style={styles.th}>ពិន្ទុសរុប</th>
                     <th style={styles.th}>GPA</th>
@@ -136,7 +136,7 @@ const DocTemplate = forwardRef((props, ref) => (
                     return (
                         <tr key={student.id}>
                             <td>{student.id}</td>
-                            <td>{student.khmerName || student.englishName}</td>
+                            <td>{student.khmerName}</td>
                             {courses.map(course => (
                                 <td>{getGPA(student.scores, course.id)}</td>
                             ))}

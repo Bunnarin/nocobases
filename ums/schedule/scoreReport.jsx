@@ -69,7 +69,7 @@ const DocTemplate = React.forwardRef((props, ref) => (
         <table className="header-table" style={{ width: '100%', marginBottom: '20px' }}>
             <tr>
                 <td>
-                    <br /><br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName || program.faculty.name}
+                    <br /><br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}
                 </td>
                 <td></td>
                 <td>
@@ -78,11 +78,11 @@ const DocTemplate = React.forwardRef((props, ref) => (
             </tr>
         </table>
         <p style={{ textAlign: 'center' }}>
-            បញ្ជីរាយនាមនិស្សិត {program.khmerName || program.englishName}
+            បញ្ជីរាយនាមនិស្សិត {program.khmerName}
             <br />
             ឆ្នាំទី{schedule.course.year} ជំនាន់ទី{semester.startYear - program.startYear + 1} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
             <br />
-            {schedule.course.khmerName || schedule.course.englishName} ថ្នាក់ {schedule.class.name}
+            {schedule.course.khmerName} ថ្នាក់ {schedule.class.name}
         </p>
         <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '11px', border: '1pt solid #000' }}>
             <thead>
@@ -113,7 +113,7 @@ const DocTemplate = React.forwardRef((props, ref) => (
                     return (
                         <tr key={student.id}>
                             <td>{student.id}</td>
-                            <td>{student.khmerName || student.name}</td>
+                            <td>{student.khmerName}</td>
                             <td>
                                 {student.birthday ? new Date(student.birthday).toLocaleDateString('en-GB') : '-'}
                             </td>

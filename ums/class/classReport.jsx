@@ -91,7 +91,7 @@ const DocTemplate = forwardRef((props, ref) => (
         <table className="header-table" style={{ width: '100%', marginBottom: '20px' }}>
             <tr>
                 <td>
-                    <br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{classs.program.faculty.khmerName || classs.program.faculty.name}
+                    <br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{classs.program.faculty.khmerName}
                 </td>
                 <td></td>
                 <td>
@@ -112,7 +112,7 @@ const DocTemplate = forwardRef((props, ref) => (
                     <th>ភេទ</th>
                     <th>ថ្ងៃខែឆ្នាំកំណើត</th>
                     {courses.map(course => (
-                        <th>{course.khmerName || course.englishName} <br /> {course.theoryCredit + course.practiceCredit} ({course.theoryCredit},{course.practiceCredit})</th>
+                        <th>{course.khmerName} <br /> {course.theoryCredit + course.practiceCredit} ({course.theoryCredit},{course.practiceCredit})</th>
                     ))}
                     <th>ពិន្ទុសរុប</th>
                     <th>ពិន្ទុមធ្យម</th>

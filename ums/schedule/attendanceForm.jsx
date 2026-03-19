@@ -165,7 +165,7 @@ const App = () => {
                     return (
                         <tr key={student.id} className="attendance-row">
                             <td>
-                                {student.khmerName || student.englishName}
+                                {student.khmerName}
                             </td>
                             <td style={{ width: '100px', textAlign: 'right' }}>
                                 <button
