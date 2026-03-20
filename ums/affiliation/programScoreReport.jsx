@@ -53,27 +53,31 @@ const GPAMap = (score) => {
     return 0.00;
 };
 
-const getGPA = (scores, courseId) => {
-    const score = getScore(scores, courseId);
-    if (isNaN(score)) return score; // cuz it's a string of 'sastified' or 'unsastified'
-    return GPAMap(score);
+const getGPAInfo = (scores, courseId) => {
+    const { displayValue, hasMakeup } = getScoreInfo(scores, courseId);
+    if (isNaN(displayValue)) return { value: displayValue, hasMakeup };
+    return { value: GPAMap(displayValue), hasMakeup };
 }
 
-const getScore = (scores, courseId) => {
+const getScoreInfo = (scores, courseId) => {
     let totalScore = 0;
+    let hasMakeup = false;
     scores.forEach(score => {
-        // score.courseId == courseId isn't enough since it can be discarded weight
-        if (score.weight.courseId === courseId) totalScore += score.value;
+        if (score.weight.courseId === courseId) {
+            totalScore += score.value;
+            if (score.makeup) hasMakeup = true;
+        }
     });
-    // language center's requirement chnage based on semester
+    
+    let displayValue = totalScore;
     if (courseId == 123) {
         const englishPassThreshold = semester.number == 1 ? 16 : 26;
-        return totalScore >= englishPassThreshold ? 'sastified' : 'unsastified';
+        displayValue = totalScore >= englishPassThreshold ? 'sastified' : 'unsastified';
+    } else if (courseId == 109 || courseId == 99) {
+        displayValue = GPAMap(totalScore) != 0.00 ? 'sastified' : 'unsastified';
     }
-    if (courseId == 109 || courseId == 99)
-        return GPAMap(totalScore) != 0.00 ? 'sastified' : 'unsastified';
-
-    return totalScore;
+    
+    return { totalScore, displayValue, hasMakeup };
 }
 
 const DocTemplate = forwardRef((props, ref) => (
@@ -123,13 +127,16 @@ const DocTemplate = forwardRef((props, ref) => (
             </thead>
             <tbody>
                 {students.map(student => {
+                    let studentHasMakeup = false;
                     const totalScore = courses.reduce((acc, course) => {
-                        const value = getScore(student.scores, course.id);
-                        if (isNaN(value)) return acc;
-                        return acc + value;
+                        const { totalScore: val, hasMakeup } = getScoreInfo(student.scores, course.id);
+                        if (hasMakeup) studentHasMakeup = true;
+                        if (isNaN(val)) return acc;
+                        return acc + val;
                     }, 0);
                     const averageGPA = courses.reduce((acc, course) => {
-                        const value = getGPA(student.scores, course.id);
+                        const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
+                        if (hasMakeup) studentHasMakeup = true;
                         if (isNaN(value)) return acc;
                         return acc + value;
                     }, 0) / courses.length;
@@ -137,12 +144,13 @@ const DocTemplate = forwardRef((props, ref) => (
                         <tr key={student.id}>
                             <td>{student.id}</td>
                             <td>{student.khmerName}</td>
-                            {courses.map(course => (
-                                <td>{getGPA(student.scores, course.id)}</td>
-                            ))}
-                            <td>{totalScore}</td>
-                            <td>{averageGPA.toFixed(2)}</td>
-                            <td>{gradeMap(averageGPA)}</td>
+                             {courses.map(course => {
+                                const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
+                                return <td key={course.id}>{value}{hasMakeup ? '*' : ''}</td>;
+                            })}
+                            <td>{totalScore}{studentHasMakeup ? '*' : ''}</td>
+                            <td>{averageGPA.toFixed(2)}{studentHasMakeup ? '*' : ''}</td>
+                            <td>{gradeMap(averageGPA)}{studentHasMakeup ? '*' : ''}</td>
                         </tr>
                     );
                 })}

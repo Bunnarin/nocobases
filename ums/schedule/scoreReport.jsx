@@ -101,14 +101,18 @@ const DocTemplate = React.forwardRef((props, ref) => (
             </thead>
             <tbody>
                 {students.map(student => {
-                    let totalScore = 0;
+                    let totalHasMakeup = false;
                     const scoreByWeightId = {};
                     student.scores?.forEach(s => {
-                        scoreByWeightId[s.weightId] = s.value || 0;
+                        scoreByWeightId[s.weightId] = { value: s.value || 0, makeup: s.makeup };
                     });
 
                     // Total score is the sum of all weight scores
-                    totalScore = weights.reduce((sum, w) => sum + (scoreByWeightId[w.id] || 0), 0);
+                    const totalScore = weights.reduce((sum, w) => {
+                        const entry = scoreByWeightId[w.id];
+                        if (entry?.makeup) totalHasMakeup = true;
+                        return sum + (entry?.value || 0);
+                    }, 0);
 
                     return (
                         <tr key={student.id}>
@@ -117,15 +121,25 @@ const DocTemplate = React.forwardRef((props, ref) => (
                             <td>
                                 {student.birthday ? new Date(student.birthday).toLocaleDateString('en-GB') : '-'}
                             </td>
-                            {clos.map(clo => {
-                                const cloScore = clo.weightIds.reduce((sum, wid) => sum + (scoreByWeightId[wid] || 0), 0);
-                                return <td key={`clo-${clo.id}`}>{cloScore}</td>
+                             {clos.map(clo => {
+                                let cloHasMakeup = false;
+                                const cloScore = clo.weightIds.reduce((sum, wid) => {
+                                    const entry = scoreByWeightId[wid];
+                                    if (entry?.makeup) cloHasMakeup = true;
+                                    return sum + (entry?.value || 0);
+                                }, 0);
+                                return <td key={`clo-${clo.id}`}>{cloScore}{cloHasMakeup ? '*' : ''}</td>
                             })}
                             {plos.map(plo => {
-                                const ploScore = plo.weightIds.reduce((sum, wid) => sum + (scoreByWeightId[wid] || 0), 0);
-                                return <td key={`plo-${plo.id}`}>{ploScore}</td>
+                                let ploHasMakeup = false;
+                                const ploScore = plo.weightIds.reduce((sum, wid) => {
+                                    const entry = scoreByWeightId[wid];
+                                    if (entry?.makeup) ploHasMakeup = true;
+                                    return sum + (entry?.value || 0);
+                                }, 0);
+                                return <td key={`plo-${plo.id}`}>{ploScore}{ploHasMakeup ? '*' : ''}</td>
                             })}
-                            <td>{totalScore}</td>
+                            <td>{totalScore}{totalHasMakeup ? '*' : ''}</td>
                         </tr>
                     );
                 })}

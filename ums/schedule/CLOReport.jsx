@@ -62,13 +62,17 @@ const SummaryTable = () => {
         let grandTotal = 0;
         const cloScores = summaryCLOs.map(clo => {
             let cloScore = 0;
+            let hasMakeup = false;
             clo.weights.forEach(w => {
                 const scoreRecord = student.scores.find(s => s.weightId === w.id);
                 cloScore += scoreRecord?.value || 0;
+                if (scoreRecord?.makeup) hasMakeup = true;
             });
             grandTotal += cloScore;
-            return cloScore;
+            return { value: cloScore, hasMakeup };
         });
+
+        let studentGrandTotalHasMakeup = cloScores.some(c => c.hasMakeup);
 
         // Global assessment check: if any assessment (across all CLOs) has a total score of 0
         let hasAnyZeroAssessment = false;
@@ -85,7 +89,7 @@ const SummaryTable = () => {
         });
 
         const isPass = !hasAnyZeroAssessment && grandTotal >= 50;
-        return { student, cloScores, grandTotal, isPass, hasAnyZeroAssessment };
+        return { student, cloScores, grandTotal, isPass, hasAnyZeroAssessment, hasMakeup: studentGrandTotalHasMakeup };
     });
 
     const summaryPassCount = summaryStudents.filter(s => s.isPass).length;
@@ -155,13 +159,13 @@ const SummaryTable = () => {
                             <td style={styles.td}>{item.student.id}</td>
                             <td style={styles.td}>{item.student.khmerName}</td>
                             {item.cloScores.map((score, i) => (
-                                <td key={i} style={styles.td}>{score}</td>
+                                <td key={i} style={styles.td}>{score.value}{score.hasMakeup ? '*' : ''}</td>
                             ))}
                             <td style={{
                                 ...styles.td,
                                 ...(item.isPass ? styles.bgGreen : styles.bgRed)
                             }}>
-                                {item.grandTotal}
+                                {item.grandTotal}{item.hasMakeup ? '*' : ''}
                             </td>
                             <td style={styles.td}>
                                 {(() => {
@@ -225,13 +229,15 @@ const CLOTable = ({ clo }) => {
             anyZeroInCLO = group.totalWeight > 0 && groupScore === 0;
         });
 
+        let anyMakeupInCLO = false;
         clo.weights.forEach(w => {
             const scoreRecord = student.scores.find(s => s.weightId === w.id);
             totalScore += scoreRecord?.value || 0;
+            if (scoreRecord?.makeup) anyMakeupInCLO = true;
         });
 
         const isPass = !anyZeroInCLO && (totalScore / maxScoreTotal >= 50 / 100);
-        return { totalScore, isPass, anyZeroInCLO };
+        return { totalScore, isPass, anyZeroInCLO, anyMakeupInCLO };
     });
 
     const totalStudents = studentResults.length;
@@ -264,16 +270,18 @@ const CLOTable = ({ clo }) => {
                 </thead>
                 <tbody>
                     {students.map((student, index) => {
-                        const { totalScore, isPass } = studentResults[index];
+                        const { totalScore, isPass, anyMakeupInCLO } = studentResults[index];
                         return (
                             <tr key={student.id}>
                                 <td style={styles.td}>{student.id}</td>
                                 <td style={styles.td}>{student.khmerName}</td>
                                 {assessmentGroups.map(group => {
                                     let groupScore = 0;
+                                    let groupHasMakeup = false;
                                     group.weights.forEach(w => {
                                         const scoreRecord = student.scores.find(s => s.weightId === w.id);
                                         groupScore += scoreRecord?.value || 0;
+                                        if (scoreRecord?.makeup) groupHasMakeup = true;
                                     });
                                     const groupPass = groupScore >= (group.totalWeight / 2);
                                     return (
@@ -281,20 +289,26 @@ const CLOTable = ({ clo }) => {
                                             ...styles.td,
                                             ...(groupPass ? styles.bgGreen : styles.bgRed),
                                             ...(groupPass ? styles.textGreen : styles.textRed),
-                                        }}>{groupScore}</td>
+                                        }}>{groupScore}{groupHasMakeup ? '*' : ''}</td>
                                     );
                                 })}
-                                <td style={styles.td}>{totalScore}</td>
+                                <td style={styles.td}>{totalScore}{anyMakeupInCLO ? '*' : ''}</td>
                                 <td style={{ ...styles.td, ...(isPass ? styles.bgGreen : styles.bgRed) }}>
-                                    {maxScoreTotal > 0 ? ((totalScore / maxScoreTotal) * 100).toFixed(0) : 0}%
+                                    {maxScoreTotal > 0 ? ((totalScore / maxScoreTotal) * 100).toFixed(0) : 0}%{anyMakeupInCLO ? '*' : ''}
                                 </td>
                                 <td style={{ ...styles.td }}>
                                     {(() => {
                                         if (anyZeroInCLO) return 'F';
                                         const pct = totalScore / maxScoreTotal * 100;
-                                        if (pct >= 85) return 'A'; if (pct >= 80) return 'B+'; if (pct >= 70) return 'B';
-                                        if (pct >= 65) return 'C+'; if (pct >= 50) return 'C'; if (pct >= 45) return 'D';
-                                        if (pct >= 40) return 'E'; return 'F';
+                                        let grade = 'F';
+                                        if (pct >= 85) grade = 'A';
+                                        else if (pct >= 80) grade = 'B+';
+                                        else if (pct >= 70) grade = 'B';
+                                        else if (pct >= 65) grade = 'C+';
+                                        else if (pct >= 50) grade = 'C';
+                                        else if (pct >= 45) grade = 'D';
+                                        else if (pct >= 40) grade = 'E';
+                                        return grade + (anyMakeupInCLO ? '*' : '');
                                     })()}
                                 </td>
                             </tr>

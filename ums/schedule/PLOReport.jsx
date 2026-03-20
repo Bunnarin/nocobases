@@ -61,13 +61,17 @@ const PLOTable = ({ plo }) => {
         let ploTotalScore = 0;
         const cloScores = ploCLOs.map(clo => {
             let cloScore = 0;
+            let hasMakeup = false;
             clo.weightIds.forEach(wid => {
                 const scoreRecord = student.scores.find(s => s.weightId === wid);
-                cloScore += scoreRecord?.value;
+                cloScore += scoreRecord?.value || 0;
+                if (scoreRecord?.makeup) hasMakeup = true;
             });
             ploTotalScore += cloScore;
-            return cloScore;
+            return { value: cloScore, hasMakeup };
         });
+
+        const ploHasMakeup = cloScores.some(c => c.hasMakeup);
 
         // Deal breaker criteria: if any assessment (across all PLOs) has a total score of 0
         let hasAnyZeroAssessment = false;
@@ -85,7 +89,7 @@ const PLOTable = ({ plo }) => {
 
         const percentage = ploMaxWeight > 0 ? (ploTotalScore / ploMaxWeight) * 100 : 0;
         const isPass = !hasAnyZeroAssessment && percentage >= 50;
-        return { student, cloScores, ploTotalScore, percentage, isPass, hasAnyZeroAssessment };
+        return { student, cloScores, ploTotalScore, percentage, isPass, hasAnyZeroAssessment, hasMakeup: ploHasMakeup };
     });
 
     const passCount = studentResults.filter(r => r.isPass).length;
@@ -132,19 +136,25 @@ const PLOTable = ({ plo }) => {
                             <td>{res.student.id}</td>
                             <td>{res.student.khmerName}</td>
                             {res.cloScores.map((score, i) => (
-                                <td key={i}>{score}</td>
+                                <td key={i}>{score.value}{score.hasMakeup ? '*' : ''}</td>
                             ))}
-                            <td>{res.ploTotalScore}</td>
+                            <td>{res.ploTotalScore}{res.hasMakeup ? '*' : ''}</td>
                             <td>
-                                {res.percentage.toFixed(0)}%
+                                {res.percentage.toFixed(0)}%{res.hasMakeup ? '*' : ''}
                             </td>
                             <td>
                                 {(() => {
                                     if (res.hasAnyZeroAssessment) return 'F';
                                     const pct = res.percentage;
-                                    if (pct >= 85) return 'A'; if (pct >= 80) return 'B+'; if (pct >= 70) return 'B';
-                                    if (pct >= 65) return 'C+'; if (pct >= 50) return 'C'; if (pct >= 45) return 'D';
-                                    if (pct >= 40) return 'E'; return 'F';
+                                    let grade = 'F';
+                                    if (pct >= 85) grade = 'A';
+                                    else if (pct >= 80) grade = 'B+';
+                                    else if (pct >= 70) grade = 'B';
+                                    else if (pct >= 65) grade = 'C+';
+                                    else if (pct >= 50) grade = 'C';
+                                    else if (pct >= 45) grade = 'D';
+                                    else if (pct >= 40) grade = 'E';
+                                    return grade + (res.hasMakeup ? '*' : '');
                                 })()}
                             </td>
                         </tr>

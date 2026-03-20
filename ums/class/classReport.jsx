@@ -33,24 +33,26 @@ const GPAMap = (score) => {
     return 0.0;
 };
 
-const getValue = (scores, courseId) => {
-    const totalScore = scores.filter(score => score.weight.courseId === courseId)
-        .reduce((acc, score) => acc + score.value, 0);
-    // language center's requirement chnage based on semester
+const getCourseInfo = (scores, courseId) => {
+    const courseScores = scores.filter(score => score.weight.courseId === courseId);
+    const totalScore = courseScores.reduce((acc, score) => acc + score.value, 0);
+    const hasMakeup = courseScores.some(score => score.makeup);
+    
+    let displayValue = totalScore;
     if (courseId == 123) {
         const englishPassThreshold = semester.number == 1 ? 16 : 26;
-        return totalScore >= englishPassThreshold ? 'sastified' : 'unsastified';
+        displayValue = totalScore >= englishPassThreshold ? 'sastified' : 'unsastified';
+    } else if (courseId == 109 || courseId == 99) {
+        displayValue = totalScore >= classs.program.passThreshold ? 'sastified' : 'unsastified';
     }
-    if (courseId == 109 || courseId == 99)
-        return totalScore >= classs.program.passThreshold ? 'sastified' : 'unsastified';
-
-    return totalScore;
+    
+    return { totalScore, displayValue, hasMakeup };
 }
 
-const getGPA = (scores, courseId) => {
-    const value = getValue(scores, courseId);
-    if (isNaN(value)) return value;
-    return GPAMap(value).toFixed(2);
+const getGPAInfo = (scores, courseId) => {
+    const { displayValue, hasMakeup } = getCourseInfo(scores, courseId);
+    if (isNaN(displayValue)) return { value: displayValue, hasMakeup };
+    return { value: GPAMap(displayValue).toFixed(2), hasMakeup };
 }
 
 // 3. Styles Object
@@ -120,15 +122,17 @@ const DocTemplate = forwardRef((props, ref) => (
             </thead>
             <tbody>
                 {students.map(student => {
+                    let studentHasMakeup = false;
                     const weightedTotalScore = courses.reduce((acc, course) => {
-                        const value = getValue(student.scores, course.id);
-                        if (isNaN(value)) return acc;
+                        const { totalScore, displayValue, hasMakeup } = getCourseInfo(student.scores, course.id);
+                        if (hasMakeup) studentHasMakeup = true;
+                        if (isNaN(displayValue)) return acc;
                         const credit = course.theoryCredit + course.practiceCredit;
-                        return acc + value * credit;
+                        return acc + totalScore * credit;
                     }, 0);
                     const totalCredit = courses.reduce((acc, course) => {
-                        const value = getValue(student.scores, course.id);
-                        if (isNaN(value)) return acc;
+                        const { displayValue } = getCourseInfo(student.scores, course.id);
+                        if (isNaN(displayValue)) return acc;
                         const credit = course.theoryCredit + course.practiceCredit;
                         return acc + credit;
                     }, 0);
@@ -138,11 +142,12 @@ const DocTemplate = forwardRef((props, ref) => (
                             <td>{student.khmerName}</td>
                             <td>{student.sex ? 'ប្រុស' : 'ស្រី'}</td>
                             <td>{student.birthday}</td>
-                            {courses.map(course => (
-                                <td>{getGPA(student.scores, course.id)}</td>
-                            ))}
-                            <td>{weightedTotalScore}</td>
-                            <td>{(weightedTotalScore / totalCredit).toFixed(2)}</td>
+                            {courses.map(course => {
+                                const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
+                                return <td key={course.id}>{value}{hasMakeup ? '*' : ''}</td>;
+                            })}
+                            <td>{weightedTotalScore}{studentHasMakeup ? '*' : ''}</td>
+                            <td>{(weightedTotalScore / totalCredit).toFixed(2)}{studentHasMakeup ? '*' : ''}</td>
                         </tr>
                     );
                 })}

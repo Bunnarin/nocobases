@@ -1,6 +1,6 @@
 const { React } = ctx.libs;
 const { Button } = ctx.libs.antd;
-const { useRef, useState } = React;
+const { useRef, useState, useEffect } = React;
 
 const { data: { data: schedule } } = await ctx.api.request({
     url: 'schedule:get',
@@ -28,7 +28,7 @@ const allClos = assessments.flatMap(assessment =>
     )
 );
 
-const totalMaxScore = allClos.reduce((sum, c) => sum + (c.weight || 0), 0);
+const totalMaxScore = allClos.reduce((sum, c) => sum + c.weight, 0);
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -37,21 +37,26 @@ const scoreKey = (studentId, weightId) => `${studentId}-${weightId}`;
 // Build initial scoreMap from server data
 const buildInitialScoreMap = () => {
     const map = {};
-    students.forEach(student => {
-        student.scores?.forEach(s => {
-            map[scoreKey(s.studentId, s.weightId)] = { value: Number(s.value), id: s.id };
-        });
-    });
+    students.forEach(student =>
+        student.scores?.forEach(s =>
+            map[scoreKey(s.studentId, s.weightId)] = { value: s.value, id: s.id, makeup: s.makeup }
+        )
+    );
     return map;
 };
 
-const getTotal = (studentId, scoreMap) =>
-    allClos.reduce((sum, c) => {
+const getTotal = (studentId, scoreMap) => {
+    let total = 0;
+    let hasMakeup = false;
+    allClos.forEach(c => {
         const entry = scoreMap[scoreKey(studentId, c.weightId)];
-        return sum + (entry ? Number(entry.value) : 0);
-    }, 0);
-
-// ── SuffixInput (fully controlled) ────────────────────────────────────────────
+        if (entry) {
+            total += entry.value;
+            if (entry.makeup) hasMakeup = true;
+        }
+    });
+    return { total, hasMakeup };
+};
 
 const SuffixInput = ({ max, value, weightId, studentId, rowIndex, colIndex, onCommit }) => {
     const [isFocused, setIsFocused] = useState(false);
@@ -59,45 +64,47 @@ const SuffixInput = ({ max, value, weightId, studentId, rowIndex, colIndex, onCo
     const timeoutRef = useRef(null);
 
     // Keep in sync if parent scoreMap changes (e.g. initial load)
-    React.useEffect(() => { setLocalValue(value ?? ''); }, [value]);
+    useEffect(() => setLocalValue(value ?? ''), [value]);
+
+    const student = students.find(({ id }) => id == studentId);
+    const originalScore = student.scores?.find(s => s.weightId == weightId);
+    let makeup = originalScore?.makeup;
 
     const handleChange = (e) => {
         const raw = e.target.value;
-        const num = raw === '' ? 0 : Number(raw);
-        if (num < 0 || num > max)
+        const num = raw === '' ? 0 : parseInt(raw);
+        if (isNaN(num) || num < 0 || num > max)
             return ctx.message.error(`Score must be between 0 and ${max}`);
-        setLocalValue(raw === '' ? '' : num); // show blank while typing, but commit 0
-        onCommit(num); // update shared scoreMap immediately
 
-        // Debounce API call
+        setLocalValue(raw === '' ? '' : num);
+
+        const isOldValFailed = originalScore?.value < max * 0.5;
+        const isNewValPassed = num >= max * 0.5;
+        const isOldValCreatedAtToday = new Date(originalScore?.createdAt).toDateString() === new Date().toDateString();
+        if (isOldValFailed && isNewValPassed && !isOldValCreatedAtToday) makeup = true;
+
+        onCommit(num, makeup);
+
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(() => {
-            const student = students.find(({ id }) => id == studentId);
-            const originalScore = student.scores?.find(s =>
-                s.weightId == weightId && s.studentId == studentId
-            );
-            if (originalScore) {
-                const updateData = { value: num };
-                const isNotToday = new Date(originalScore.createdAt).toDateString() !== new Date().toDateString();
-                updateData.makeup = originalScore.value < max * 0.5 && isNotToday;
+            if (originalScore)
                 ctx.api.request({
                     url: 'score:update',
                     method: 'POST',
                     params: { filterByTk: originalScore.id },
-                    data: updateData
+                    data: { value: num, makeup }
                 });
-            } else {
+            else
                 ctx.api.request({
                     url: 'score:create',
                     method: 'POST',
                     data: {
                         student: studentId,
                         weight: weightId,
-                        course: schedule.course.id,
+                        course: schedule.courseId,
                         value: num
                     }
-                });
-            }
+                }).then(res => student.scores.push(res.data.data));
         }, 1000);
     };
 
@@ -115,7 +122,8 @@ const SuffixInput = ({ max, value, weightId, studentId, rowIndex, colIndex, onCo
     return (
         <div style={{ position: 'relative', display: 'inline-block' }}>
             <input
-                type="number"
+                // this disable the scroll
+                type="text"
                 min="0"
                 max={max}
                 step="1"
@@ -128,6 +136,7 @@ const SuffixInput = ({ max, value, weightId, studentId, rowIndex, colIndex, onCo
                 onBlur={() => setIsFocused(false)}
                 style={{ border: 'none', width: isFocused ? '65px' : '45px' }}
             />
+            {makeup && '*'}
             {isFocused && (
                 <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)' }}>
                     /{max}
@@ -184,31 +193,28 @@ const ScoreTable = ({ scoreMap, onCommit }) => (<>
         </thead>
         <tbody>
             {students.map((student, rowIndex) => {
-                const total = getTotal(student.id, scoreMap);
+                const { total, hasMakeup } = getTotal(student.id, scoreMap);
                 const pct = totalMaxScore > 0 ? (total / totalMaxScore) * 100 : 0;
                 const pass = pct >= 50;
                 return (
                     <tr key={student.id}>
                         <td>{student.khmerName}</td>
-                        {allClos.map((clo, colIndex) => {
-                            const entry = scoreMap[scoreKey(student.id, clo.weightId)];
-                            return (
-                                <td key={`${student.id}-${clo.weightId}`}>
-                                    <SuffixInput
-                                        max={clo.weight}
-                                        value={entry?.value ?? ''}
-                                        studentId={student.id}
-                                        weightId={clo.weightId}
-                                        rowIndex={rowIndex}
-                                        colIndex={colIndex}
-                                        onCommit={(val) => onCommit(student.id, clo.weightId, val)}
-                                    />
-                                </td>
-                            );
-                        })}
-                        <td>{total}/{totalMaxScore}</td>
+                        {allClos.map((clo, colIndex) => (
+                            <td key={scoreKey(student.id, clo.weightId)}>
+                                <SuffixInput
+                                    max={clo.weight}
+                                    value={scoreMap[scoreKey(student.id, clo.weightId)]?.value}
+                                    studentId={student.id}
+                                    weightId={clo.weightId}
+                                    rowIndex={rowIndex}
+                                    colIndex={colIndex}
+                                    onCommit={(val, mk) => onCommit(student.id, clo.weightId, val, mk)}
+                                />
+                            </td>
+                        ))}
+                        <td>{total}{hasMakeup ? '*' : ''}/{totalMaxScore}</td>
                         <td>
-                            {pass ? 'Pass' : 'Fail'}
+                            {pass ? 'Pass' : 'Fail'}{hasMakeup ? '*' : ''}
                         </td>
                     </tr>
                 );
@@ -274,7 +280,7 @@ const DocTemplate = React.forwardRef(({ scoreMap }, ref) => (
             </thead>
             <tbody>
                 {students.map(student => {
-                    const total = getTotal(student.id, scoreMap);
+                    const { total, hasMakeup } = getTotal(student.id, scoreMap);
                     const pct = totalMaxScore > 0 ? (total / totalMaxScore) * 100 : 0;
                     const pass = pct >= 50;
                     return (
@@ -282,10 +288,10 @@ const DocTemplate = React.forwardRef(({ scoreMap }, ref) => (
                             <td style={{ textAlign: 'left' }}>{student.khmerName}</td>
                             {allClos.map(clo => {
                                 const entry = scoreMap[scoreKey(student.id, clo.weightId)];
-                                return <td key={`${student.id}-${clo.weightId}`}>{entry?.value ?? ''}</td>;
+                                return <td key={`${student.id}-${clo.weightId}`}>{entry?.value ?? ''}{entry?.makeup ? '*' : ''}</td>;
                             })}
-                            <td style={{ fontWeight: 'bold' }}>{total}/{totalMaxScore}</td>
-                            <td style={{ fontWeight: 'bold' }}>{pass ? 'Pass' : 'Fail'}</td>
+                            <td style={{ fontWeight: 'bold' }}>{total}{hasMakeup ? '*' : ''}/{totalMaxScore}</td>
+                            <td style={{ fontWeight: 'bold' }}>{pass ? 'Pass' : 'Fail'}{hasMakeup ? '*' : ''}</td>
                         </tr>
                     );
                 })}
@@ -300,11 +306,15 @@ const App = () => {
     const [scoreMap, setScoreMap] = useState(buildInitialScoreMap);
     const docRef = useRef(null);
 
-    const handleCommit = (studentId, weightId, value) => {
-        setScoreMap(prev => ({
-            ...prev,
-            [scoreKey(studentId, weightId)]: { ...prev[scoreKey(studentId, weightId)], value }
-        }));
+    const handleCommit = (studentId, weightId, value, makeup) => {
+        const key = scoreKey(studentId, weightId);
+        setScoreMap(prev => {
+            const next = {
+                ...prev,
+                [key]: { ...prev[key], value, makeup }
+            };
+            return next;
+        });
     };
 
     const download = () => {
