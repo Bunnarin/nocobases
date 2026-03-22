@@ -13,12 +13,19 @@ const { data: { data: classs } } = await ctx.api.request({
 });
 
 // because LC needs to know what the latest semester is
-const { data: { data: [semester] } } = await ctx.api.request({
+const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         sort: '-startDate',
-        limit: 1
+        limit: 3
     }
+});
+
+// find the semester whose endDate is closest to now
+const semester = semesters.reduce((prev, curr) => {
+    const prevDiff = Math.abs(new Date(prev.endDate).getTime() - now.getTime());
+    const currDiff = Math.abs(new Date(curr.endDate).getTime() - now.getTime());
+    return currDiff < prevDiff ? curr : prev;
 });
 
 const students = classs.students.sort((a, b) => a.khmerName.localeCompare(b.khmerName, 'km'));
@@ -29,7 +36,7 @@ const GPAMap = (score) => {
     if (score >= 80) return 3.5;
     if (score >= 70) return 3.0;
     if (score >= 65) return 2.5;
-    if (score >= classs.program.passThreshold) return 2.0;
+    if (score >= 50) return 2.0;
     return 0.0;
 };
 
@@ -37,15 +44,16 @@ const getCourseInfo = (scores, courseId) => {
     const courseScores = scores.filter(score => score.weight.courseId === courseId);
     const totalScore = courseScores.reduce((acc, score) => acc + score.value, 0);
     const hasMakeup = courseScores.some(score => score.makeup);
-    
+
     let displayValue = totalScore;
     if (courseId == 123) {
-        const englishPassThreshold = semester.number == 1 ? 16 : 26;
-        displayValue = totalScore >= englishPassThreshold ? 'sastified' : 'unsastified';
+        const englishPassThreshold = semester.number == 1 ? 8 : 13;
+        const numOfWeight = courseScores.length;
+        displayValue = totalScore / numOfWeight >= englishPassThreshold ? 'sastified' : 'unsastified';
     } else if (courseId == 109 || courseId == 99) {
-        displayValue = totalScore >= classs.program.passThreshold ? 'sastified' : 'unsastified';
+        displayValue = totalScore >= 50 ? 'sastified' : 'unsastified';
     }
-    
+
     return { totalScore, displayValue, hasMakeup };
 }
 
@@ -55,20 +63,9 @@ const getGPAInfo = (scores, courseId) => {
     return { value: GPAMap(displayValue).toFixed(2), hasMakeup };
 }
 
-// 3. Styles Object
-const styles = {
-    container: { fontFamily: 'Khmer OS Battambang, Arial' },
-    table: { borderCollapse: 'collapse', width: '100%', fontSize: '12px' },
-    th: { border: '1pt solid #ccc', padding: '8px', textAlign: 'center', backgroundColor: '#f2f2f2' },
-    td: { border: '1pt solid #ccc', padding: '8px' },
-    tdCenter: { border: '1pt solid #ccc', padding: '8px', textAlign: 'center' },
-    bgGreen: { backgroundColor: '#d4edda' },
-    bgRed: { backgroundColor: '#f8d7da' },
-};
-
 // 4. Components
 const DocTemplate = forwardRef((props, ref) => (
-    <div ref={ref} style={styles.container}>
+    <div ref={ref}>
         <style>{`
             th {
                 border: 1pt solid #ccc;
@@ -106,7 +103,7 @@ const DocTemplate = forwardRef((props, ref) => (
             <br />
             ថ្នាក់ {classs.name}
         </p>
-        <table style={styles.table}>
+        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
             <thead>
                 <tr>
                     <th>ID</th>

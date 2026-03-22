@@ -3,12 +3,19 @@ const { Button } = ctx.libs.antd;
 const { useRef } = React;
 
 // 1. Data Fetching
-const { data: { data: [semester] } } = await ctx.api.request({
+const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         sort: '-startDate',
-        limit: 1
+        limit: 3
     }
+});
+
+// find the semester whose endDate is closest to now
+const semester = semesters.reduce((prev, curr) => {
+    const prevDiff = Math.abs(new Date(prev.endDate).getTime() - now.getTime());
+    const currDiff = Math.abs(new Date(curr.endDate).getTime() - now.getTime());
+    return currDiff < prevDiff ? curr : prev;
 });
 
 const { data: { data: schedule } } = await ctx.api.request({
@@ -32,24 +39,7 @@ weights.forEach(weight => {
 });
 const CLOs = Object.values(closMap).sort((a, b) => a.number - b.number);
 
-// 3. Styles Object
-const styles = {
-    container: { fontFamily: 'Khmer OS Battambang, sans-serif' },
-    cloContainer: { marginBottom: '40px', pageBreakAfter: 'always' },
-    table: { borderCollapse: 'collapse', width: '100%', fontSize: '12px' },
-    th: { border: '1pt solid #ccc', padding: '8px', textAlign: 'center' },
-    thHeader: { border: '1pt solid #ccc', padding: '8px', minWidth: '150px' },
-    headerRow: { backgroundColor: '#f2f2f2' },
-    td: { border: '1pt solid #ccc', padding: '8px' },
-    tdNoBorder: { border: 'none' },
-    bgGreen: { backgroundColor: '#d4edda' },
-    bgRed: { backgroundColor: '#f8d7da' },
-    textGreen: { color: '#155724' },
-    textRed: { color: '#721c24' },
-};
-
 // 4. Sub-components
-
 const SummaryTable = () => {
     // Calculate Summary Data
     const summaryCLOs = CLOs.map(clo => {
@@ -137,37 +127,34 @@ const SummaryTable = () => {
             <br />
             {schedule.course.khmerName} ថ្នាក់ {schedule.class.name}
         </p>
-        <div className="clo-page" style={styles.cloContainer}>
+        <div className="clo-page">
             <h3 style={{ color: '#1890ff' }}>Summary Report</h3>
-            <table style={styles.table}>
+            <table style={{ fontFamily: 'Khmer OS Battambang', borderCollapse: 'collapse', width: '100%' }}>
                 <thead>
-                    <tr style={styles.headerRow}>
-                        <th style={styles.thHeader}>ID</th>
-                        <th style={styles.thHeader}>Name</th>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
                         {summaryCLOs.map(clo => (
-                            <th key={clo.id} style={styles.th}>
+                            <th key={clo.id}>
                                 CLO {clo.number}<br />({clo.totalWeight})
                             </th>
                         ))}
-                        <th style={styles.th}>Total Marks<br />(100)</th>
-                        <th style={styles.th}>Grade</th>
+                        <th>Total Marks<br />(100)</th>
+                        <th>Grade</th>
                     </tr>
                 </thead>
                 <tbody>
                     {summaryStudents.map((item, idx) => (
                         <tr key={item.student.id}>
-                            <td style={styles.td}>{item.student.id}</td>
-                            <td style={styles.td}>{item.student.khmerName}</td>
+                            <td>{item.student.id}</td>
+                            <td>{item.student.khmerName}</td>
                             {item.cloScores.map((score, i) => (
-                                <td key={i} style={styles.td}>{score.value}{score.hasMakeup ? '*' : ''}</td>
+                                <td key={i}>{score.value}{score.hasMakeup ? '*' : ''}</td>
                             ))}
-                            <td style={{
-                                ...styles.td,
-                                ...(item.isPass ? styles.bgGreen : styles.bgRed)
-                            }}>
+                            <td>
                                 {item.grandTotal}{item.hasMakeup ? '*' : ''}
                             </td>
-                            <td style={styles.td}>
+                            <td>
                                 {(() => {
                                     if (item.hasAnyZeroAssessment) return 'F';
                                     const pct = item.grandTotal; // Assuming total weight is 100
@@ -181,13 +168,13 @@ const SummaryTable = () => {
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colSpan={2 + summaryCLOs.length} rowSpan={4} style={styles.tdNoBorder}></td>
-                        <td style={styles.td}># Fail</td>
-                        <td style={styles.td}>{summaryFailCount} ({summaryFailPct}%)</td>
+                        <td colSpan={2 + summaryCLOs.length} rowSpan={4}></td>
+                        <td># Fail</td>
+                        <td>{summaryFailCount} ({summaryFailPct}%)</td>
                     </tr>
                     <tr>
-                        <td style={styles.td}># Pass</td>
-                        <td style={styles.td}>{summaryPassCount} ({summaryPassPct}%)</td>
+                        <td># Pass</td>
+                        <td>{summaryPassCount} ({summaryPassPct}%)</td>
                     </tr>
                 </tfoot>
             </table>
@@ -247,25 +234,25 @@ const CLOTable = ({ clo }) => {
     const failPercentage = ((failCount / totalStudents) * 100).toFixed(0);
 
     return (
-        <div className="clo-page" style={styles.cloContainer}>
+        <div className="clo-page">
             <h3 style={{ color: '#1890ff' }}>{`CLO ${clo.number}: ${clo.statement}`}</h3>
-            <table style={styles.table}>
+            <table style={{ fontFamily: 'Khmer OS Battambang', borderCollapse: 'collapse', width: '100%' }}>
                 <thead>
-                    <tr style={styles.headerRow}>
-                        <th rowSpan={2} style={styles.thHeader}>id</th>
-                        <th rowSpan={2} style={styles.thHeader}>name</th>
+                    <tr>
+                        <th rowSpan={2}>id</th>
+                        <th rowSpan={2}>name</th>
                         {assessmentGroups.map(group => (
-                            <th key={group.id} style={styles.th}>{group.name}</th>
+                            <th key={group.id}>{group.name}</th>
                         ))}
-                        <th colSpan={3} style={styles.th}>Total</th>
+                        <th colSpan={3}>Total</th>
                     </tr>
-                    <tr style={styles.headerRow}>
+                    <tr>
                         {assessmentGroups.map(group => (
-                            <th key={group.id} style={styles.th}>max {group.totalWeight}</th>
+                            <th key={group.id}>max {group.totalWeight}</th>
                         ))}
-                        <th style={styles.th}>max {maxScoreTotal}</th>
-                        <th style={styles.th}>100%</th>
-                        <th style={styles.th}>Grade</th>
+                        <th>max {maxScoreTotal}</th>
+                        <th>100%</th>
+                        <th>Grade</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -273,8 +260,8 @@ const CLOTable = ({ clo }) => {
                         const { totalScore, isPass, anyMakeupInCLO } = studentResults[index];
                         return (
                             <tr key={student.id}>
-                                <td style={styles.td}>{student.id}</td>
-                                <td style={styles.td}>{student.khmerName}</td>
+                                <td>{student.id}</td>
+                                <td>{student.khmerName}</td>
                                 {assessmentGroups.map(group => {
                                     let groupScore = 0;
                                     let groupHasMakeup = false;
@@ -285,18 +272,14 @@ const CLOTable = ({ clo }) => {
                                     });
                                     const groupPass = groupScore >= (group.totalWeight / 2);
                                     return (
-                                        <td key={group.id} style={{
-                                            ...styles.td,
-                                            ...(groupPass ? styles.bgGreen : styles.bgRed),
-                                            ...(groupPass ? styles.textGreen : styles.textRed),
-                                        }}>{groupScore}{groupHasMakeup ? '*' : ''}</td>
+                                        <td key={group.id}>{groupScore}{groupHasMakeup ? '*' : ''}</td>
                                     );
                                 })}
-                                <td style={styles.td}>{totalScore}{anyMakeupInCLO ? '*' : ''}</td>
-                                <td style={{ ...styles.td, ...(isPass ? styles.bgGreen : styles.bgRed) }}>
+                                <td>{totalScore}{anyMakeupInCLO ? '*' : ''}</td>
+                                <td>
                                     {maxScoreTotal > 0 ? ((totalScore / maxScoreTotal) * 100).toFixed(0) : 0}%{anyMakeupInCLO ? '*' : ''}
                                 </td>
-                                <td style={{ ...styles.td }}>
+                                <td>
                                     {(() => {
                                         if (anyZeroInCLO) return 'F';
                                         const pct = totalScore / maxScoreTotal * 100;
@@ -317,15 +300,15 @@ const CLOTable = ({ clo }) => {
                 </tbody>
                 <tfoot>
                     <tr>
-                        <td colSpan={2 + assessmentGroups.length} rowSpan={4} style={styles.tdNoBorder}></td>
-                        <td style={styles.td}>Fail</td>
-                        <td style={styles.td}>{failCount} ({failPercentage}%)</td>
-                        <td style={styles.td}>Avg. CLO achieved</td>
+                        <td colSpan={2 + assessmentGroups.length} rowSpan={4}></td>
+                        <td>Fail</td>
+                        <td>{failCount} ({failPercentage}%)</td>
+                        <td>Avg. CLO achieved</td>
                     </tr>
                     <tr>
-                        <td style={styles.td}>Pass</td>
-                        <td style={styles.td}>{passCount} ({passPercentage}%)</td>
-                        <td style={styles.td}>{passPercentage >= 50 ? 'yes' : 'no'}</td>
+                        <td>Pass</td>
+                        <td>{passCount} ({passPercentage}%)</td>
+                        <td>{passPercentage >= 50 ? 'yes' : 'no'}</td>
                     </tr>
                 </tfoot>
             </table>
@@ -337,7 +320,7 @@ const CLOTable = ({ clo }) => {
 // 5. App / DocTemplate
 const DocTemplate = React.forwardRef((props, ref) => {
     return (
-        <div ref={ref} style={styles.container}>
+        <div ref={ref}>
             <SummaryTable />
             {CLOs.map(clo => (<CLOTable key={clo.id} clo={clo} />))}
         </div>

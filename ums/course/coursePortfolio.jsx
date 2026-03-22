@@ -1,4 +1,6 @@
-let { data: { data: [semester] } } = await ctx.api.request({
+const { Button } = ctx.libs.antd;
+
+const { data: { data: [semester] } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         pageSize: 1,
@@ -16,6 +18,7 @@ const { data: { data: portfolios } } = await ctx.api.request({
         }
     }
 });
+
 const { data: { data: criterias } } = await ctx.api.request({
     url: 'coursePortfolioCriteria:list',
 });
@@ -39,18 +42,13 @@ const PortfolioTable = () => {
     const handleUpload = async (criteriaId, e) => {
         setLoading(prev => ({ ...prev, [criteriaId]: true }));
         const newFileIds = [];
-        for (const file of e.target.files) {
-
-            // Step 1: Create the attachment record
-            // Since FormData constructor is blocked, we pass the file in 'data'
-            // Many axios-based requesters (like ctx.api) handle this automatically
+        for (const file of e.target.files)
             await ctx.api.request({
                 url: 'file:create',
                 method: 'POST',
                 data: { file },
                 headers: { 'Content-Type': 'multipart/form-data' }
             }).then(({ data }) => newFileIds.push({ id: data.data.id }));
-        }
         // Step 2: Update or Create the Portfolio record
         const existing = portfolios.find(p => p.criteriaId === criteriaId);
         if (existing)
@@ -74,7 +72,7 @@ const PortfolioTable = () => {
                     semester: semester.id,
                     files: newFileIds
                 }
-            });
+            }).then(res => portfolios.push(res.data.data));
         window.location.reload();
     };
 
@@ -82,9 +80,9 @@ const PortfolioTable = () => {
         <h1>{semester.startYear}-{(semester.startYear + 1) % 100} - ឆមាសទី {semester.number}</h1>
         <table>
             <thead>
-                <tr style={{ backgroundColor: '#fafafa' }}>
-                    <th style={styles.th}>Criteria</th>
-                    <th style={styles.th}>Attached Files</th>
+                <tr>
+                    <th>Criteria</th>
+                    <th>Attached Files</th>
                 </tr>
             </thead>
             <tbody>
@@ -94,9 +92,9 @@ const PortfolioTable = () => {
 
                     return (
                         <tr key={crit.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                            <td style={styles.td}>
+                            <td>
                                 <div style={{ fontWeight: '600' }}>{crit.name}</div>
-                                <label style={{ ...styles.uploadBtn, backgroundColor: hasFiles ? '#1890ff' : '#ff4d4f' }}>
+                                <label style={{ ...styles.uploadBtn, backgroundColor: hasFiles ? '#696969ff' : '#1890ff' }}>
                                     {loading[crit.id] ? '...' : 'Upload'}
                                     <input
                                         multiple
@@ -109,7 +107,7 @@ const PortfolioTable = () => {
                                 </label>
                             </td>
 
-                            <td style={styles.td}>
+                            <td>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
                                     {portfolio?.files.map(f => (
                                         <div key={f.id} style={styles.fileWrapper}>
@@ -132,8 +130,6 @@ const PortfolioTable = () => {
 };
 
 const styles = {
-    th: { borderBottom: '1px solid #e8e8e8', padding: '16px', textAlign: 'left' },
-    td: { padding: '16px', verticalAlign: 'top' },
     uploadBtn: {
         display: 'inline-block',
         padding: '6px 16px',

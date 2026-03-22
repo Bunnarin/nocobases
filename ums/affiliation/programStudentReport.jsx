@@ -11,12 +11,19 @@ const { data: { data: program } } = await ctx.api.request({
     }
 });
 
-const { data: { data: [semester] } } = await ctx.api.request({
+const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         sort: '-startDate',
-        limit: 1
+        limit: 3
     }
+});
+
+// find the semester whose endDate is closest to now
+const semester = semesters.reduce((prev, curr) => {
+    const prevDiff = Math.abs(new Date(prev.endDate).getTime() - now.getTime());
+    const currDiff = Math.abs(new Date(curr.endDate).getTime() - now.getTime());
+    return currDiff < prevDiff ? curr : prev;
 });
 
 // why not filter by just majorId? well that's cuz foundation also need to pull

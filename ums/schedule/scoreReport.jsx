@@ -2,12 +2,19 @@ const { React } = ctx.libs;
 const { Button } = ctx.libs.antd;
 const { useRef } = React;
 
-const { data: { data: [semester] } } = await ctx.api.request({
+const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         sort: '-startDate',
-        limit: 1
+        limit: 3
     }
+});
+
+// find the semester whose endDate is closest to now
+const semester = semesters.reduce((prev, curr) => {
+    const prevDiff = Math.abs(new Date(prev.endDate).getTime() - now.getTime());
+    const currDiff = Math.abs(new Date(curr.endDate).getTime() - now.getTime());
+    return currDiff < prevDiff ? curr : prev;
 });
 
 const scheduleId = await ctx.getVar('ctx.popup.resource.filterByTk');
@@ -121,7 +128,7 @@ const DocTemplate = React.forwardRef((props, ref) => (
                             <td>
                                 {student.birthday ? new Date(student.birthday).toLocaleDateString('en-GB') : '-'}
                             </td>
-                             {clos.map(clo => {
+                            {clos.map(clo => {
                                 let cloHasMakeup = false;
                                 const cloScore = clo.weightIds.reduce((sum, wid) => {
                                     const entry = scoreByWeightId[wid];

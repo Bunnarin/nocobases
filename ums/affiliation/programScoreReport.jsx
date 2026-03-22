@@ -4,12 +4,19 @@ const { Button } = ctx.libs.antd;
 
 const programId = await ctx.getVar('ctx.popup.resource.filterByTk');
 
-const { data: { data: [semester] } } = await ctx.api.request({
+const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         sort: '-startDate',
-        limit: 1
+        limit: 3
     }
+});
+
+// find the semester whose endDate is closest to now
+const semester = semesters.reduce((prev, curr) => {
+    const prevDiff = Math.abs(new Date(prev.endDate).getTime() - now.getTime());
+    const currDiff = Math.abs(new Date(curr.endDate).getTime() - now.getTime());
+    return currDiff < prevDiff ? curr : prev;
 });
 
 const { data: { data: program } } = await ctx.api.request({
@@ -62,21 +69,21 @@ const getGPAInfo = (scores, courseId) => {
 const getScoreInfo = (scores, courseId) => {
     let totalScore = 0;
     let hasMakeup = false;
-    scores.forEach(score => {
-        if (score.weight.courseId === courseId) {
-            totalScore += score.value;
-            if (score.makeup) hasMakeup = true;
-        }
+    const relevantScores = scores.filter(s => s.weight.courseId === courseId);
+    relevantScores.forEach(score => {
+        totalScore += score.value;
+        if (score.makeup) hasMakeup = true;
     });
-    
+
     let displayValue = totalScore;
     if (courseId == 123) {
-        const englishPassThreshold = semester.number == 1 ? 16 : 26;
-        displayValue = totalScore >= englishPassThreshold ? 'sastified' : 'unsastified';
+        const englishPassThreshold = semester.number == 1 ? 8 : 13;
+        const numOfWeight = relevantScores.length;
+        displayValue = totalScore / numOfWeight >= englishPassThreshold ? 'sastified' : 'unsastified';
     } else if (courseId == 109 || courseId == 99) {
-        displayValue = GPAMap(totalScore) != 0.00 ? 'sastified' : 'unsastified';
+        displayValue = GPAMap(totalScore) >= 2.00 ? 'sastified' : 'unsastified';
     }
-    
+
     return { totalScore, displayValue, hasMakeup };
 }
 
@@ -112,17 +119,30 @@ const DocTemplate = forwardRef((props, ref) => (
             លទ្ធផលប្រឡងឆមាសទី {semester.number} និស្សិតឆ្នាំទី {students[0].year} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
             <br />{program.khmerName}
         </p>
-        <table style={styles.table}>
+        <table style={{ fontFamily: 'Khmer OS Battambang', borderCollapse: 'collapse', width: '100%' }}>
             <thead>
                 <tr>
-                    <th style={styles.th}>ID</th>
-                    <th style={styles.th}>ឈ្មោះ</th>
+                    <th rowSpan={2}>ID</th>
+                    <th rowSpan={2}>ឈ្មោះ</th>
                     {courses.map(course => (
-                        <th style={styles.th}><div style={styles['vertical-text']}>{course.khmerName}</div> <br /> {course.theoryCredit + course.practiceCredit} ({course.theoryCredit},{course.practiceCredit}) </th>
+                        <th style={{
+                            writingMode: 'vertical-rl',
+                            transform: 'rotate(180deg)',
+                            whiteSpace: 'nowrap',
+                            textAlign: 'left',
+                            margin: '0 auto',
+                        }}>
+                            {course.khmerName}
+                        </th>
                     ))}
-                    <th style={styles.th}>ពិន្ទុសរុប</th>
-                    <th style={styles.th}>GPA</th>
-                    <th style={styles.th}>Grade</th>
+                    <th rowSpan={2}>ពិន្ទុសរុប</th>
+                    <th rowSpan={2}>GPA</th>
+                    <th rowSpan={2}>Grade</th>
+                </tr>
+                <tr>
+                    {courses.map(c => (<th>
+                        {c.theoryCredit + c.practiceCredit} ({c.theoryCredit},{c.practiceCredit})
+                    </th>))}
                 </tr>
             </thead>
             <tbody>
@@ -144,7 +164,7 @@ const DocTemplate = forwardRef((props, ref) => (
                         <tr key={student.id}>
                             <td>{student.id}</td>
                             <td>{student.khmerName}</td>
-                             {courses.map(course => {
+                            {courses.map(course => {
                                 const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
                                 return <td key={course.id}>{value}{hasMakeup ? '*' : ''}</td>;
                             })}
@@ -205,25 +225,6 @@ const App = () => {
         <Button type="primary" onClick={download} style={{ marginBottom: '10px' }}>download</Button>
         <DocTemplate ref={docRef} />
     </>);
-};
-
-const styles = {
-    table: { borderCollapse: 'collapse', width: '100%', fontSize: '12px', marginBottom: '20px' },
-    tdCenter: { border: '1pt solid #ccc', padding: '8px', textAlign: 'center' },
-    'vertical-text': {
-        writingMode: 'vertical-rl',
-        transform: 'rotate(180deg)',
-        whiteSpace: 'nowrap',
-        textAlign: 'left',
-        margin: '0 auto',
-    },
-    th: {
-        border: '1pt solid #ccc', padding: '8px', backgroundColor: '#f2f2f2',
-        /* Adjust height of the header row to accommodate the rotated text */
-        height: '150px',
-        verticalAlign: 'bottom', /* Align the rotated text to the bottom of the cell */
-    }
-
 };
 
 ctx.render(<App />);

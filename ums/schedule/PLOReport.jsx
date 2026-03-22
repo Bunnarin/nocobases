@@ -3,12 +3,19 @@ const { useRef } = React;
 const { Button } = ctx.libs.antd;
 
 // 1. Data Fetching
-const { data: { data: [semester] } } = await ctx.api.request({
+const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         sort: '-startDate',
-        limit: 1
+        limit: 3
     }
+});
+
+// find the semester whose endDate is closest to now
+const semester = semesters.reduce((prev, curr) => {
+    const prevDiff = Math.abs(new Date(prev.endDate).getTime() - now.getTime());
+    const currDiff = Math.abs(new Date(curr.endDate).getTime() - now.getTime());
+    return currDiff < prevDiff ? curr : prev;
 });
 
 const { data: { data: schedule } } = await ctx.api.request({
@@ -43,13 +50,6 @@ weights.forEach(w => {
 });
 
 const PLOs = Object.values(plosMap).sort((a, b) => a.number - b.number);
-
-// 3. Styles Object
-const styles = {
-    container: { fontFamily: 'Khmer OS Battambang, Arial' },
-    ploContainer: { marginBottom: '40px', pageBreakAfter: 'always' },
-    table: { borderCollapse: 'collapse', width: '100%', fontSize: '12px' },
-};
 
 // 4. Sub-components
 
@@ -98,9 +98,9 @@ const PLOTable = ({ plo }) => {
     const failPercentage = ((failCount / studentResults.length) * 100).toFixed(0);
 
     return (
-        <div className="plo-page" style={styles.ploContainer}>
+        <div className="plo-page">
             <h3 style={{ color: '#1890ff' }}>{`PLO ${plo.number}: ${plo.statement || ''}`}</h3>
-            <table style={styles.table}>
+            <table style={{ fontFamily: 'Khmer OS Battambang', borderCollapse: 'collapse', width: '100%' }}>
                 <thead>
                     <tr>
                         <th rowSpan={2}>ID</th>
@@ -180,7 +180,7 @@ const PLOTable = ({ plo }) => {
 
 // 5. DocTemplate Component
 const DocTemplate = React.forwardRef((props, ref) => (
-    <div ref={ref} style={styles.container}>
+    <div ref={ref}>
         <style>{`
             th {
                 border: 1pt solid #ccc;
