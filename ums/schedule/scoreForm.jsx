@@ -1,5 +1,5 @@
 const { React } = ctx.libs;
-const { Button } = ctx.libs.antd;
+const { Button, Switch, Modal } = ctx.libs.antd;
 const { useRef, useState, useEffect, forwardRef } = React;
 
 // because LC needs to know what the latest semester is
@@ -31,19 +31,32 @@ const isEnglish = schedule.course.englishName == 'english';
 const students = schedule.class.students.sort((a, b) => a.khmerName?.localeCompare(b.khmerName, 'km'));
 const { weights, program } = schedule.course;
 
-const assessments = Object.values(weights.reduce((acc, { assessment, CLO, PLO, weight, id: weightId }) => {
-    acc[assessment.name] ??= { ...assessment, PLOs: {} };
-    const currentPLO = PLO || { id: 0, statement: '' };
-    const currentCLO = CLO ? { ...CLO, weight, weightId } : { weight, weightId, statement: '' };
-    acc[assessment.name].PLOs[currentPLO.id] ??= { ...currentPLO, CLOs: [] };
-    acc[assessment.name].PLOs[currentPLO.id].CLOs.push(currentCLO);
-    return acc;
-}, {})).map(assessment => ({ ...assessment, PLOs: Object.values(assessment.PLOs) }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+const clos = Object.values(weights.reduce((acc, { assessment, CLO, PLO, weight, id: weightId }) => {
+    const currentCLO = CLO || { id: 0, number: '', statement: '' };
+    const currentPLO = PLO || { id: 0, number: '', statement: '' };
 
-const allClos = assessments.flatMap(({ PLOs, name }) =>
-    PLOs.flatMap(plo =>
-        plo.CLOs.map(clo => ({ ...clo, assessmentName: name }))
+    acc[currentCLO.id] ??= { ...currentCLO, PLOs: {} };
+    acc[currentCLO.id].PLOs[currentPLO.id] ??= { ...currentPLO, assessments: [] };
+
+    acc[currentCLO.id].PLOs[currentPLO.id].assessments.push({
+        ...assessment,
+        weight,
+        weightId,
+        assessmentName: assessment.name
+    });
+    return acc;
+}, {})).map(clo => ({
+    ...clo,
+    PLOs: Object.values(clo.PLOs)
+})).sort((a, b) => a.number - b.number);
+
+const allClos = clos.flatMap(clo =>
+    clo.PLOs.flatMap(plo =>
+        plo.assessments.map(assessment => ({
+            ...assessment,
+            cloNumber: clo.number,
+            ploNumber: plo.number
+        }))
     )
 );
 
@@ -57,7 +70,7 @@ const scoreKey = (studentId, weightId) => `${studentId}-${weightId}`;
 const buildInitialScoreMap = () => {
     const map = {};
     students.forEach(student =>
-        student.scores?.forEach(s =>
+        student.scores?.filter(s => s.courseId == schedule.courseId).forEach(s =>
             map[scoreKey(student.id, s.weightId)] = s
         )
     );
@@ -77,7 +90,7 @@ const getTotal = (studentId, scoreMap) => {
     return { total, hasMakeup };
 };
 
-const SuffixInput = ({ max, value, weightId, studentId, rowIndex, colIndex, onCommit, onPaste }) => {
+const SuffixInput = ({ max, value, makeup, weightId, studentId, rowIndex, colIndex, onCommit, onPaste, checkMakeupPrompt }) => {
     const [isFocused, setIsFocused] = useState(false);
     const [localValue, setLocalValue] = useState(value ?? '');
     const timeoutRef = useRef(null);
@@ -87,22 +100,18 @@ const SuffixInput = ({ max, value, weightId, studentId, rowIndex, colIndex, onCo
 
     const student = students.find(({ id }) => id == studentId);
     const originalScore = student.scores?.find(s => s.weightId == weightId);
-    let makeup = originalScore?.makeup;
 
-    const handleChange = (e) => {
+    const handleChange = async (e) => {
         const raw = e.target.value;
-        const num = raw === '' ? 0 : parseInt(raw);
+        const num = raw === '' ? 0 : parseFloat(raw);
         if (isNaN(num) || num < 0 || num > max)
             return ctx.message.error(`Score must be between 0 and ${max}`);
 
         setLocalValue(raw === '' ? '' : num);
 
-        const isOldValFailed = originalScore?.value < max * 0.5;
-        const isNewValPassed = num >= max * 0.5;
-        const isOldValCreatedAtToday = new Date(originalScore?.createdAt).toDateString() === new Date().toDateString();
-        if (isOldValFailed && isNewValPassed && !isOldValCreatedAtToday) makeup = true;
+        const currentMakeup = await checkMakeupPrompt(originalScore?.value || 0, max);
 
-        onCommit(num, makeup);
+        onCommit(num, currentMakeup);
 
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(() => {
@@ -111,7 +120,10 @@ const SuffixInput = ({ max, value, weightId, studentId, rowIndex, colIndex, onCo
                     url: 'score:update',
                     method: 'POST',
                     params: { filterByTk: originalScore.id },
-                    data: { value: num, makeup }
+                    data: { value: num, makeup: currentMakeup }
+                }).then(res => {
+                    const idx = student.scores.findIndex(s => s.weightId == weightId);
+                    student.scores[idx] = res.data.data;
                 });
             else
                 ctx.api.request({
@@ -121,7 +133,8 @@ const SuffixInput = ({ max, value, weightId, studentId, rowIndex, colIndex, onCo
                         student: studentId,
                         weight: weightId,
                         course: schedule.course.id,
-                        value: num
+                        value: num,
+                        makeup: currentMakeup
                     }
                 }).then(res => student.scores.push(res.data.data));
         }, 1000);
@@ -165,7 +178,7 @@ const SuffixInput = ({ max, value, weightId, studentId, rowIndex, colIndex, onCo
 
 // ── Visible interactive table ──────────────────────────────────────────────────
 
-const ScoreTable = ({ scoreMap, onCommit, onPaste }) => (<>
+const ScoreTable = ({ scoreMap, onCommit, onPaste, checkMakeupPrompt }) => (<>
     <style>{`
             th { border: 1pt solid #000; padding: 6px; text-align: center; background-color: #f2f2f2; }
             td { border: 1pt solid #000; padding: 6px; text-align: center; }
@@ -175,32 +188,44 @@ const ScoreTable = ({ scoreMap, onCommit, onPaste }) => (<>
         <thead>
             <tr>
                 <th rowSpan={isEnglish ? 1 : 3}>ឈ្មោះ</th>
-                {assessments.map(({ name, PLOs }) => {
-                    const totalClos = PLOs.reduce((s, p) => s + p.CLOs.length, 0);
-                    return (
-                        <th key={name} colSpan={totalClos} title={name}
-                            style={{ padding: '4px', maxWidth: totalClos * 80 + 'px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {name}
+                {isEnglish ? (
+                    allClos.map(c =>
+                        <th key={c.weightId} title={c.assessmentName}
+                            style={{ padding: '4px', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {c.assessmentName}
                         </th>
-                    );
-                })}
+                    )
+                ) : (
+                    clos.map(({ id, number, statement, PLOs }) => {
+                        const totalAssessments = PLOs.reduce((s, p) => s + p.assessments.length, 0);
+                        return (
+                            <th key={id} colSpan={totalAssessments} title={statement}
+                                style={{ padding: '4px', maxWidth: totalAssessments * 80 + 'px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {number ? `CLO ${number}` : ''}
+                            </th>
+                        );
+                    })
+                )}
             </tr>
             {!isEnglish && (<>
                 <tr>
-                    {assessments.map(({ PLOs }) =>
-                        PLOs.map(plo => (
-                            <th key={plo.id} colSpan={plo.CLOs.length} title={plo.statement}>
-                                {`PLO ${plo.number}`}
-                            </th>
-                        ))
+                    {clos.map(({ PLOs }) =>
+                        PLOs.map(plo => {
+                            const totalAssessments = plo.assessments.length;
+                            return (
+                                <th key={plo.id} colSpan={totalAssessments} title={plo.statement}>
+                                    {plo.number ? `PLO ${plo.number}` : ''}
+                                </th>
+                            );
+                        })
                     )}
                 </tr>
                 <tr>
-                    {assessments.map(({ PLOs }) =>
+                    {clos.map(({ PLOs }) =>
                         PLOs.map(plo =>
-                            plo.CLOs.map(clo => (
-                                <th key={clo.weightId} title={clo.statement}>
-                                    {`CLO ${clo.number}`}
+                            plo.assessments.map(c => (
+                                <th key={c.weightId} title={c.assessmentName} style={{ padding: '4px', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {c.assessmentName}
                                 </th>
                             ))
                         )
@@ -217,12 +242,14 @@ const ScoreTable = ({ scoreMap, onCommit, onPaste }) => (<>
                             <SuffixInput
                                 max={clo.weight}
                                 value={scoreMap[scoreKey(student.id, clo.weightId)]?.value}
+                                makeup={scoreMap[scoreKey(student.id, clo.weightId)]?.makeup}
                                 studentId={student.id}
                                 weightId={clo.weightId}
                                 rowIndex={rowIndex}
                                 colIndex={colIndex}
                                 onCommit={(val, mk) => onCommit(student.id, clo.weightId, val, mk)}
                                 onPaste={(e) => onPaste(e, rowIndex, colIndex)}
+                                checkMakeupPrompt={checkMakeupPrompt}
                             />
                         </td>
                     ))}
@@ -253,7 +280,7 @@ const DocTemplate = forwardRef(({ scoreMap }, ref) => (
 
         <table className="header-table" style={{ width: '100%', marginBottom: '20px' }}>
             <tr>
-                <td><br /><br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty?.khmerName}</td>
+                <td><br /><br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}</td>
                 <td></td>
                 <td>ព្រះរាជាណាចក្រកម្ពុជា<br />ជាតិ សាសនា ព្រះមហាក្សត្រ</td>
             </tr>
@@ -273,33 +300,41 @@ const DocTemplate = forwardRef(({ scoreMap }, ref) => (
                     <th rowSpan={isEnglish ? 1 : 3}>name</th>
                     <th rowSpan={isEnglish ? 1 : 3}>ភេទ</th>
                     <th rowSpan={isEnglish ? 1 : 3}>ថ្ងៃខែឆ្នាំកំណើត</th>
-                    {assessments.map(({ name, PLOs }) => {
-                        const totalClos = PLOs.reduce((s, p) => s + p.CLOs.length, 0);
-                        return (<>
-                            <th key={name} colSpan={totalClos}>{name}</th>
-                            {isEnglish && <th key={name + '-band'}>band</th>}
-                        </>);
-                    })}
+                    {isEnglish ? (
+                        allClos.map(c => (<>
+                            <th key={c.weightId} title={c.assessmentName}>{c.assessmentName}</th>
+                            <th key={c.weightId + '-band'}>band</th>
+                        </>))
+                    ) : (
+                        clos.map(({ id, number, statement, PLOs }) => {
+                            const totalAssessments = PLOs.reduce((s, p) => s + p.assessments.length, 0);
+                            return (
+                                <th key={id} colSpan={totalAssessments} title={statement}>
+                                    {number ? `CLO ${number}` : ''}
+                                </th>
+                            );
+                        })
+                    )}
                     <th rowSpan={isEnglish ? 1 : 3}>{isEnglish ? 'មធ្យម' : 'សរុប'}</th>
                     <th rowSpan={isEnglish ? 1 : 3}>លទ្ធផល</th>
                     {isEnglish && <th>band</th>}
                 </tr>
                 {!isEnglish && (<>
                     <tr>
-                        {assessments.map(({ PLOs }) =>
+                        {clos.map(({ PLOs }) =>
                             PLOs.map(plo => (
-                                <th key={plo.id} colSpan={plo.CLOs.length} title={plo.statement}>
-                                    {`PLO ${plo.number}`}
+                                <th key={plo.id} colSpan={plo.assessments.length} title={plo.statement}>
+                                    {plo.number ? `PLO ${plo.number}` : ''}
                                 </th>
                             ))
                         )}
                     </tr>
                     <tr>
-                        {assessments.map(({ PLOs }) =>
+                        {clos.map(({ PLOs }) =>
                             PLOs.map(plo =>
-                                plo.CLOs.map(clo => (
-                                    <th key={clo.weightId} title={clo.statement}>
-                                        {`CLO ${clo.number}`}
+                                plo.assessments.map(c => (
+                                    <th key={c.weightId} title={c.assessmentName}>
+                                        {c.assessmentName}
                                     </th>
                                 ))
                             )
@@ -312,7 +347,7 @@ const DocTemplate = forwardRef(({ scoreMap }, ref) => (
                     const { total, hasMakeup } = getTotal(student.id, scoreMap);
                     let pass = total / totalMaxScore >= 0.5;
                     // different pass logic for LC
-                    const avg = total / assessments.length;
+                    const avg = total / allClos.length;
                     if (isEnglish) {
                         const englishPassThreshold = semester.number == 1 ? 8 : 13;
                         pass = avg >= englishPassThreshold;
@@ -365,7 +400,77 @@ const DocTemplate = forwardRef(({ scoreMap }, ref) => (
 ));
 
 const App = () => {
-    const [scoreMap, setScoreMap] = useState(buildInitialScoreMap);
+    const [scoreMapState, setScoreMapState] = useState(buildInitialScoreMap);
+    const scoreMapRef = useRef(scoreMapState);
+    const initialScoreMapRef = useRef(scoreMapState);
+    const setScoreMap = (val) => {
+        if (typeof val === 'function') {
+            setScoreMapState(prev => {
+                const updated = val(prev);
+                scoreMapRef.current = updated;
+                return updated;
+            });
+        } else {
+            scoreMapRef.current = val;
+            setScoreMapState(val);
+        }
+    };
+    const scoreMap = scoreMapState;
+    const [isMakeup, setIsMakeupState] = useState(Object.values(scoreMap).some(s => !!s.makeup));
+    const isMakeupRef = useRef(Object.values(scoreMap).some(s => !!s.makeup));
+    const setIsMakeup = (checked) => {
+        setIsMakeupState(checked);
+        isMakeupRef.current = checked;
+    };
+
+    const hasPromptedRef = useRef(false);
+    const isPromptingRef = useRef(false);
+
+    const checkMakeupPrompt = (oldVal, max) => {
+        if (hasPromptedRef.current) return Promise.resolve(isMakeupRef.current);
+
+        // the only condition that we prompt is when we have never added a mekeup before (cuz if we have added, it means that by defualt we makeup)
+        const noScoreMakeup = Object.values(initialScoreMapRef.current).every(s => !s.makeup);
+        const noScoreYet = Object.values(initialScoreMapRef.current).every(s => s.value === 0);
+        console.log('no score yet: ', noScoreYet);
+
+        if (oldVal < max * 0.5 && noScoreMakeup && !noScoreYet) {
+            if (isPromptingRef.current)
+                return new Promise(resolve => {
+                    const interval = setInterval(() => {
+                        if (!isPromptingRef.current) {
+                            clearInterval(interval);
+                            resolve(isMakeupRef.current);
+                        }
+                    }, 100);
+                });
+
+            isPromptingRef.current = true;
+            return new Promise(resolve =>
+                Modal.confirm({
+                    title: 'Makeup Score?',
+                    content: 'Are you currently grading makeup scores?',
+                    okText: 'Yes',
+                    cancelText: 'No',
+                    onOk() {
+                        setIsMakeup(true);
+                        hasPromptedRef.current = true;
+                        isPromptingRef.current = false;
+                        resolve(true);
+                    },
+                    onCancel() {
+                        setIsMakeup(false);
+                        hasPromptedRef.current = true;
+                        isPromptingRef.current = false;
+                        resolve(false);
+                    }
+                })
+            );
+        }
+
+        return Promise.resolve(isMakeupRef.current);
+    };
+
     const docRef = useRef(null);
 
     const handleCommit = (studentId, weightId, value, makeup) => {
@@ -379,7 +484,7 @@ const App = () => {
         });
     };
 
-    const handlePaste = (e, startRowIdx, startColIdx) => {
+    const handlePaste = async (e, startRowIdx, startColIdx) => {
         e.preventDefault();
         const text = e.clipboardData.getData('Text');
         if (!text) return;
@@ -406,9 +511,9 @@ const App = () => {
 
                 if (raw === '') continue;
 
-                const num = parseInt(raw);
+                const num = parseFloat(raw);
                 if (isNaN(num) || num < 0 || num > clo.weight)
-                    return ctx.message.error(`Failed at Student "${student.khmerName}", Column "${clo.assessmentName} (CLO ${clo.number || ''})": value "${raw}" is invalid or exceeds max ${clo.weight}. Paste cancelled.`);
+                    return ctx.message.error(`"${student.khmerName}", CLO ${clo.cloNumber}: value "${raw}" is invalid or exceeds max ${clo.weight}.`);
 
                 updates.push({
                     student,
@@ -420,21 +525,20 @@ const App = () => {
 
         if (updates.length === 0) return;
 
+        let globalMakeup = isMakeupRef.current;
+        for (const { student, clo } of updates) {
+            const originalScore = student.scores?.find(s => s.weightId == clo.weightId);
+            const oldVal = originalScore?.value || 0;
+            globalMakeup = await checkMakeupPrompt(oldVal, clo.weight);
+        }
+
         setScoreMap(prev => {
             const next = { ...prev };
             updates.forEach(({ student, clo, val }) => {
                 const key = scoreKey(student.id, clo.weightId);
                 const originalScore = student.scores?.find(s => s.weightId == clo.weightId);
 
-                let makeup = originalScore?.makeup;
-                if (originalScore) {
-                    const isOldValFailed = originalScore.value < clo.weight * 0.5;
-                    const isNewValPassed = val >= clo.weight * 0.5;
-                    const isOldValCreatedAtToday = new Date(originalScore.createdAt).toDateString() === new Date().toDateString();
-                    if (isOldValFailed && isNewValPassed && !isOldValCreatedAtToday) makeup = true;
-                }
-
-                next[key] = { ...next[key], value: val, makeup };
+                next[key] = { ...next[key], value: val, makeup: globalMakeup };
 
                 // Fire API calls asynchronously
                 if (originalScore)
@@ -442,7 +546,10 @@ const App = () => {
                         url: 'score:update',
                         method: 'POST',
                         params: { filterByTk: originalScore.id },
-                        data: { value: val, makeup }
+                        data: { value: val, makeup: globalMakeup }
+                    }).then(res => {
+                        const idx = student.scores.findIndex(s => s.weightId == weightId);
+                        student.scores[idx] = res.data.data;
                     });
                 else
                     ctx.api.request({
@@ -452,7 +559,8 @@ const App = () => {
                             student: student.id,
                             weight: clo.weightId,
                             course: schedule.course.id,
-                            value: val
+                            value: val,
+                            makeup: globalMakeup
                         }
                     }).then(res => student.scores.push(res.data.data));
             });
@@ -489,9 +597,15 @@ const App = () => {
     };
 
     return (<>
-        <Button type="primary" onClick={download} style={{ marginBottom: '10px' }}>download</Button>
+        <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <span>
+                Makeup score?&nbsp;
+                <Switch checked={isMakeup} onChange={(checked) => { setIsMakeup(checked); hasPromptedRef.current = true; }} />
+            </span>
+            <Button type="primary" onClick={download}>download</Button>
+        </div>
         <p>you can also paste from excel as long as the name ordering is the same</p>
-        <ScoreTable scoreMap={scoreMap} onCommit={handleCommit} onPaste={handlePaste} />
+        <ScoreTable scoreMap={scoreMap} onCommit={handleCommit} onPaste={handlePaste} checkMakeupPrompt={checkMakeupPrompt} />
         <div style={{ position: 'absolute', left: '-9999px', top: 0, pointerEvents: 'none' }}>
             <DocTemplate ref={docRef} scoreMap={scoreMap} />
         </div>

@@ -66,7 +66,7 @@ const App = () => {
 
         // detach weights
         for (const weightId of weightToDetach)
-            ctx.api.request({
+            await ctx.api.request({
                 url: 'weight:update',
                 method: 'POST',
                 params: {
@@ -79,7 +79,7 @@ const App = () => {
 
         // detach CLOs
         for (const cloId of cloToDetach)
-            ctx.api.request({
+            await ctx.api.request({
                 url: 'CLO:update',
                 method: 'POST',
                 params: {
