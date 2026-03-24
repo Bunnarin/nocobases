@@ -103,11 +103,13 @@ const SuffixInput = ({ max, value, makeup, weightId, studentId, rowIndex, colInd
 
     const handleChange = async (e) => {
         const raw = e.target.value;
-        const num = raw === '' ? 0 : parseFloat(raw);
-        if (isNaN(num) || num < 0 || num > max)
+        if (raw !== '' && !/^\d*\.?\d*$/.test(raw)) return; // Restrict input strictly to decimals
+
+        const num = (raw === '' || raw === '.') ? 0 : parseFloat(raw);
+        if (num < 0 || num > max)
             return ctx.message.error(`Score must be between 0 and ${max}`);
 
-        setLocalValue(raw === '' ? '' : num);
+        setLocalValue(raw);
 
         const currentMakeup = await checkMakeupPrompt(originalScore?.value || 0, max);
 
@@ -430,11 +432,11 @@ const App = () => {
         if (hasPromptedRef.current) return Promise.resolve(isMakeupRef.current);
 
         // the only condition that we prompt is when we have never added a mekeup before (cuz if we have added, it means that by defualt we makeup)
-        const noScoreMakeup = Object.values(initialScoreMapRef.current).every(s => !s.makeup);
-        const noScoreYet = Object.values(initialScoreMapRef.current).every(s => s.value === 0);
-        console.log('no score yet: ', noScoreYet);
+        const scores = Object.values(initialScoreMapRef.current);
+        const noScoreMakeup = scores.every(s => !s.makeup);
+        const someScoreNotToday = scores.some(s => new Date(s.createdAt).toDateString() !== new Date().toDateString() && s.value !== 0);
 
-        if (oldVal < max * 0.5 && noScoreMakeup && !noScoreYet) {
+        if (oldVal < max * 0.5 && noScoreMakeup && someScoreNotToday) {
             if (isPromptingRef.current)
                 return new Promise(resolve => {
                     const interval = setInterval(() => {
@@ -449,9 +451,9 @@ const App = () => {
             return new Promise(resolve =>
                 Modal.confirm({
                     title: 'Makeup Score?',
-                    content: 'Are you currently grading makeup scores?',
-                    okText: 'Yes',
-                    cancelText: 'No',
+                    content: 'ពិន្ទុនេះធម្មតា ឬប្រឡងសង?',
+                    okText: 'ប្រឡងសង',
+                    cancelText: 'ធម្មតា',
                     onOk() {
                         setIsMakeup(true);
                         hasPromptedRef.current = true;
@@ -513,7 +515,7 @@ const App = () => {
 
                 const num = parseFloat(raw);
                 if (isNaN(num) || num < 0 || num > clo.weight)
-                    return ctx.message.error(`"${student.khmerName}", CLO ${clo.cloNumber}: value "${raw}" is invalid or exceeds max ${clo.weight}.`);
+                    return ctx.message.error(`"${student.khmerName}", CLO ${clo.cloNumber}: value "${raw}" is invalid or exceeds maximum.`);
 
                 updates.push({
                     student,
@@ -570,7 +572,6 @@ const App = () => {
     };
 
     const download = () => {
-        const contentHTML = docRef.current.innerHTML;
         const fullHTML = `
             <html xmlns:o='urn:schemas-microsoft-com:office:office'
                   xmlns:w='urn:schemas-microsoft-com:office:word'
@@ -584,7 +585,7 @@ const App = () => {
                         .header-table td { border: none; }
                     </style>
                 </head>
-                <body>${contentHTML}</body>
+                <body>${docRef.current.innerHTML}</body>
             </html>
         `;
         const blob = new Blob([fullHTML], { type: 'application/msword' });
