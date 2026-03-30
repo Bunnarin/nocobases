@@ -48,26 +48,27 @@ const { data: { data: students } } = await ctx.api.request({
     }
 });
 
-const degreeMap = ['បរិញ្ញាបត្ររង', 'បរិញ្ញាបត្រ', 'អនុបណ្ឌិត', 'បណ្ឌិត', 'បណ្ឌិតវេជ្ជសាស្ត្រសត្វ'];
+const degreeMap = ['AD', 'BSc', 'MSc', 'PhD', 'DVM'];
 
+// for some reason the react style block have some power over the doc download, except the font
 const DocTemplate = forwardRef(({ selectedYear }, ref) => (
     <div ref={ref}>
         <style>{`
+            table, p {
+                font-family: 'Khmer OS Battambang', sans-serif;
+                font-size: 10px;
+                border-collapse: collapse;
+                width: 100%;
+            }
             td, th {
                 text-align: center;
                 border: 1pt solid #ccc;
-                padding: 8px;
             }
-            .header-table td {
+            .invisible-table td {
                 border: none;
-                width: 30%;
-            }
-            .footer-table td {
-                border: none;
-                width: 50%;
             }
         `}</style>
-        <table className="header-table" style={{ width: '100%', marginBottom: '20px' }}>
+        <table className="invisible-table">
             <tr>
                 <td>
                     <br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}
@@ -83,7 +84,7 @@ const DocTemplate = forwardRef(({ selectedYear }, ref) => (
             <br />
             ឆ្នាំទី{selectedYear} ជំនាន់ទី{semester.startYear - program.startYear + 1 - selectedYear} ឆ្នាំសិក្សា {semester.startYear} - {semester.startYear + 1}
         </p>
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <table>
             <thead>
                 <tr>
                     <th>No.</th>
@@ -109,7 +110,7 @@ const DocTemplate = forwardRef(({ selectedYear }, ref) => (
                         <td>{student.oldId}</td>
                         <td>{student.khmerName}</td>
                         <td>{student.englishName}</td>
-                        <td>{student.sex ? 'ស្រី' : 'ប្រុស'}</td>
+                        <td>{student.sex ? 'ស' : 'ប'}</td>
                         <td>{student.birthday}</td>
                         <td>{student.background?.province?.name}</td>
                         <td>{degreeMap[student.major.degree]}</td>
@@ -123,26 +124,10 @@ const DocTemplate = forwardRef(({ selectedYear }, ref) => (
                 ))}
             </tbody>
         </table>
-        <table className="footer-table" style={{ width: '100%' }}>
+        <table className="invisible-table">
             <tr>
                 <td>
                     ចំនួននិស្សិតសរុប៖ {students.filter(s => s.year == selectedYear).length}នាក់ (ស្រី៖ {students.filter(s => s.year == selectedYear && s.sex).length}នាក់)
-                    <br />
-                    ប្រធានគណៈកម្មការប្រឡង
-                </td>
-                <td>
-                    <br /><br />
-                    ថ្ងៃ ខែ ឆ្នាំម្សាញ់ សប្តស័ក ព.ស ២៥៦៩
-                    <br />
-                    រាជធានីភ្នំពេញ, ថ្ងៃទី ខែ ឆ្នាំ ២០២៦
-                    <br />
-                    ព្រឺទ្ធបុរស
-                </td>
-            </tr>
-        </table>
-        <table className="header-table" style={{ width: '100%' }}>
-            <tr>
-                <td>
                     <br /><br />
                     បានឃើញ និងឯកភាព
                     <br />
@@ -152,6 +137,12 @@ const DocTemplate = forwardRef(({ selectedYear }, ref) => (
                     បានពិនិត្យត្រឹមត្រូវ
                     <br />
                     នាយកមជ្ឈមណ្ឌលសិក្សានិងសេវានិស្សិត
+                    <br /><br /><br /><br />
+                    ថ្ងៃ ខែ ឆ្នាំម្សាញ់ សប្តស័ក ព.ស ២៥៦៩
+                    <br />
+                    រាជធានីភ្នំពេញ, ថ្ងៃទី ខែ ឆ្នាំ ២០២៦
+                    <br />
+                    ព្រឺទ្ធបុរស
                 </td>
                 <td></td>
             </tr>
@@ -164,24 +155,24 @@ const App = () => {
     const [selectedYear, setSelectedYear] = useState(programId == 1 ? 1 : 2);
 
     const download = () => {
-        const contentHTML = docRef.current.innerHTML;
         const fullHTML = `
-            <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='https://www.w3.org/TR/html40'>
-            <head><meta charset='utf-8'>
-            <style>
-                body { font-family: 'Khmer OS Battambang', sans-serif; }
-                table { border-collapse: collapse; width: 100%; }
-                td, th { border: 1pt solid #ccc; padding: 5pt; }
-            </style>
-            </head><body>
-                ${contentHTML}
-            </body></html>
+            <html xmlns:o='urn:schemas-microsoft-com:office:office'
+                  xmlns:w='urn:schemas-microsoft-com:office:word'
+                  xmlns='https://www.w3.org/TR/html40'>
+                <head>
+                    <meta charset='utf-8'>
+                </head>
+                <body>
+                    ${docRef.current.innerHTML}
+                </body>
+            </html>
         `;
-
-        const element = document.createElement('a');
-        element.href = `data:application/vnd.ms-word,${encodeURIComponent(fullHTML)}`;
-        element.download = `export.doc`;
-        element.click();
+        const blob = new Blob([fullHTML], { type: 'application/msword' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'export.doc';
+        a.click();
+        URL.revokeObjectURL(a.href);
     };
 
     return (<>
@@ -195,9 +186,9 @@ const App = () => {
                 { value: 3, label: '3' },
                 { value: 4, label: '4' },
             ]}
-            style={{ marginRight: '10px' }}
+            style={{ marginRight: '10px', marginBottom: '10px' }}
         />
-        <Button type="primary" onClick={download} style={{ marginBottom: '10px' }}>download</Button>
+        <Button type="primary" onClick={download}>download</Button>
         <DocTemplate selectedYear={selectedYear} ref={docRef} />
     </>);
 };

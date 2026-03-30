@@ -95,16 +95,16 @@ const DocTemplate = forwardRef((props, ref) => (
                 border: 1pt solid #ccc;
                 padding: 8px;
             }
-            .header-table td {
+            .invisible-table td {
                 border: none;
                 width: 30%;
             }
-            .footer-table td {
+            .invisible-table td {
                 border: none;
                 width: 50%;
             }
         `}</style>
-        <table className="header-table" style={{ width: '100%', marginBottom: '20px' }}>
+        <table className="invisible-table">
             <tr>
                 <td>
                     <br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}
@@ -119,19 +119,13 @@ const DocTemplate = forwardRef((props, ref) => (
             លទ្ធផលប្រឡងឆមាសទី {semester.number} និស្សិតឆ្នាំទី {students[0].year} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
             <br />{program.khmerName}
         </p>
-        <table style={{ fontFamily: 'Khmer OS Battambang', borderCollapse: 'collapse', width: '100%' }}>
+        <table>
             <thead>
                 <tr>
                     <th rowSpan={2}>ID</th>
                     <th rowSpan={2}>ឈ្មោះ</th>
                     {courses.map(course => (
-                        <th style={{
-                            writingMode: 'vertical-rl',
-                            transform: 'rotate(180deg)',
-                            whiteSpace: 'nowrap',
-                            textAlign: 'left',
-                            margin: '0 auto',
-                        }}>
+                        <th>
                             {course.khmerName}
                         </th>
                     ))}
@@ -176,7 +170,7 @@ const DocTemplate = forwardRef((props, ref) => (
                 })}
             </tbody>
         </table>
-        <table className="footer-table" style={{ width: '100%' }}>
+        <table className="invisible-table">
             <tr>
                 <td>
                     សំគាល់៖ ពិន្ទុដែលទទួលបាន 0.00 ឬ Unsatisfied ជាពិន្ទុប្រឡងធ្លាក់ដែលត្រូវប្រឡងសង។
@@ -201,24 +195,24 @@ const App = () => {
     const docRef = useRef(null);
 
     const download = () => {
-        const contentHTML = docRef.current.innerHTML;
         const fullHTML = `
-            <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='https://www.w3.org/TR/html40'>
-            <head><meta charset='utf-8'>
-            <style>
-                body { font-family: 'Khmer OS Battambang', sans-serif; }
-                table { border-collapse: collapse; width: 100%; }
-                td, th { border: 1pt solid #ccc; padding: 5pt; }
-            </style>
-            </head><body>
-                ${contentHTML}
-            </body></html>
+            <html xmlns:o='urn:schemas-microsoft-com:office:office'
+                  xmlns:w='urn:schemas-microsoft-com:office:word'
+                  xmlns='https://www.w3.org/TR/html40'>
+                <head>
+                    <meta charset='utf-8'>
+                </head>
+                <body>
+                    ${docRef.current.innerHTML}
+                </body>
+            </html>
         `;
-
-        const element = document.createElement('a');
-        element.href = `data:application/vnd.ms-word,${encodeURIComponent(fullHTML)}`;
-        element.download = `export.doc`;
-        element.click();
+        const blob = new Blob([fullHTML], { type: 'application/msword' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'export.doc';
+        a.click();
+        URL.revokeObjectURL(a.href);
     };
 
     return (<>

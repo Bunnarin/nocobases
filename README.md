@@ -29,7 +29,7 @@ nginx -t
 systemctl reload nginx
 certbot --nginx -d your_domain.com
 
-<!-- postgres setup -->
+<!-- postgres setup (tedious bcuz we access the host from the container, it'd be easier if we use container db) -->
 sudo -i -u postgres psql
 \password postgres
 CREATE DATABASE ...
@@ -50,4 +50,4 @@ docker run -d \
   --env-file .env \
   -v "$(pwd)/storage:/app/nocobase/storage" \
   -p 13000:80 \
-  nocobase/nocobase:alpha
+  nocobase/nocobase:latest

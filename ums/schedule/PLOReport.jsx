@@ -99,8 +99,8 @@ const PLOTable = ({ plo }) => {
 
     return (
         <div className="plo-page">
-            <h3 style={{ color: '#1890ff' }}>{`PLO ${plo.number}: ${plo.statement || ''}`}</h3>
-            <table style={{ fontFamily: 'Khmer OS Battambang', borderCollapse: 'collapse', width: '100%' }}>
+            <h3>{`PLO ${plo.number}: ${plo.statement}`}</h3>
+            <table>
                 <thead>
                     <tr>
                         <th rowSpan={2}>ID</th>
@@ -120,7 +120,7 @@ const PLOTable = ({ plo }) => {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr style={{ fontWeight: 'bold' }}>
+                    <tr>
                         <td colSpan={2}>CW = weight x credit ({credit})</td>
                         {ploCLOs.map(clo => (
                             <td key={clo.id}>
@@ -182,27 +182,21 @@ const PLOTable = ({ plo }) => {
 const DocTemplate = React.forwardRef((props, ref) => (
     <div ref={ref}>
         <style>{`
-            th {
-                border: 1pt solid #ccc;
-                padding: 8px;
+            table, p {
+                font-family: 'Khmer OS Battambang', sans-serif;
+                font-size: 10px;
+                border-collapse: collapse;
+                width: 100%;
+            }
+            td, th {
                 text-align: center;
-                background-color: #f2f2f2;
-            }
-            td {
-                text-align: center;
                 border: 1pt solid #ccc;
-                padding: 8px;
             }
-            .header-table td {
+            .invisible-table td {
                 border: none;
-                width: 30%;
-            }
-            .footer-table td {
-                border: none;
-                width: 50%;
             }
         `}</style>
-        <table className="header-table" style={{ width: '100%', marginBottom: '20px' }}>
+        <table className="invisible-table">
             <tr>
                 <td>
                     <br /><br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}
@@ -231,28 +225,24 @@ const App = () => {
     const docRef = useRef(null);
 
     const download = () => {
-        const contentHTML = docRef.current.innerHTML;
         const fullHTML = `
-            <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='https://www.w3.org/TR/html40'>
-            <head><meta charset='utf-8'>
-            <style>
-                body { font-family: 'Khmer OS Battambang', sans-serif; }
-                table { border-collapse: collapse; width: 100%; }
-                td, th { border: 1pt solid #ccc; padding: 5pt; }
-                .plo-page { page-break-after: always; }
-            </style>
-            </head><body>
-                ${contentHTML}
-            </body></html>
+            <html xmlns:o='urn:schemas-microsoft-com:office:office'
+                  xmlns:w='urn:schemas-microsoft-com:office:word'
+                  xmlns='https://www.w3.org/TR/html40'>
+                <head>
+                    <meta charset='utf-8'>
+                </head>
+                <body>
+                    ${docRef.current.innerHTML}
+                </body>
+            </html>
         `;
-
         const blob = new Blob([fullHTML], { type: 'application/msword' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `PLO_Report_${schedule.course?.name || 'export'}.doc`;
-        link.click();
-        URL.revokeObjectURL(url);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'export.doc';
+        a.click();
+        URL.revokeObjectURL(a.href);
     };
 
     return (<>

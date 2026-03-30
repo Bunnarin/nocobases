@@ -205,12 +205,8 @@ const App = () => {
             table { width: 100%; border-collapse: collapse; }
             th, td { padding: 10px; border: 1px solid #ddd; text-align: left; vertical-align: top; }
             th { background-color: #f5f5f5; }
-            .ant-select, input, textarea { width: 100% !important; box-sizing: border-box; }
             input, textarea { padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
             textarea { resize: vertical; min-height: 60px; }
-            .btn-add { color: #007bff; border: none; background: none; cursor: pointer; font-weight: bold; }
-            .btn-remove { color: #ff4d4f; border: none; background: none; cursor: pointer; }
-            .btn-main-add { margin-bottom: 10px; background: #007bff; color: #fff; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
             
             .deadline-overlay {
                 position: absolute;

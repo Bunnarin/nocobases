@@ -2,6 +2,15 @@ const { React } = ctx.libs;
 const { useRef, forwardRef } = React;
 const { Button } = ctx.libs.antd;
 
+const GPAMap = (score) => {
+    if (score >= 85) return 4.0;
+    if (score >= 80) return 3.5;
+    if (score >= 70) return 3.0;
+    if (score >= 65) return 2.5;
+    if (score >= 50) return 2.0;
+    return 0.0;
+};
+
 // 1. Data Fetching
 const classId = await ctx.getVar('ctx.popup.resource.filterByTk');
 const { data: { data: classs } } = await ctx.api.request({
@@ -29,16 +38,11 @@ const semester = semesters.reduce((prev, curr) => {
 });
 
 const students = classs.students.sort((a, b) => a.khmerName.localeCompare(b.khmerName, 'km'));
-const courses = classs.schedules.map(schedule => schedule.course);
 
-const GPAMap = (score) => {
-    if (score >= 85) return 4.0;
-    if (score >= 80) return 3.5;
-    if (score >= 70) return 3.0;
-    if (score >= 65) return 2.5;
-    if (score >= 50) return 2.0;
-    return 0.0;
-};
+const specialCourseIds = [123, 109, 99];
+// make sure these special are last
+const courses = classs.schedules.map(schedule => schedule.course)
+    .sort((a, b) => specialCourseIds.indexOf(a.id) - specialCourseIds.indexOf(b.id));
 
 const getCourseInfo = (scores, courseId) => {
     const courseScores = scores.filter(score => score.weight.courseId === courseId);
@@ -48,11 +52,10 @@ const getCourseInfo = (scores, courseId) => {
     let displayValue = totalScore;
     if (courseId == 123) {
         const englishPassThreshold = semester.number == 1 ? 8 : 13;
-        const numOfWeight = courseScores.length;
-        displayValue = totalScore / numOfWeight >= englishPassThreshold ? 'sastified' : 'unsastified';
-    } else if (courseId == 109 || courseId == 99) {
+        const average = totalScore / courseScores.length;
+        displayValue = average >= englishPassThreshold ? 'sastified' : 'unsastified';
+    } else if (courseId == 109 || courseId == 99)
         displayValue = totalScore >= 50 ? 'sastified' : 'unsastified';
-    }
 
     return { totalScore, displayValue, hasMakeup };
 }
@@ -67,27 +70,21 @@ const getGPAInfo = (scores, courseId) => {
 const DocTemplate = forwardRef((props, ref) => (
     <div ref={ref}>
         <style>{`
-            th {
-                border: 1pt solid #ccc;
-                padding: 8px;
+            table, p {
+                font-family: 'Khmer OS Battambang', sans-serif;
+                font-size: 10px;
+                border-collapse: collapse;
+                width: 100%;
+            }
+            td, th {
                 text-align: center;
-                background-color: #f2f2f2;
-            }
-            td {
-                text-align: center;
                 border: 1pt solid #ccc;
-                padding: 8px;
             }
-            .header-table td {
+            .invisible-table td {
                 border: none;
-                width: 30%;
-            }
-            .footer-table td {
-                border: none;
-                width: 50%;
             }
         `}</style>
-        <table className="header-table" style={{ width: '100%', marginBottom: '20px' }}>
+        <table className="invisible-table">
             <tr>
                 <td>
                     <br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{classs.program.faculty.khmerName}
@@ -103,7 +100,7 @@ const DocTemplate = forwardRef((props, ref) => (
             <br />
             ថ្នាក់ {classs.name}
         </p>
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <table>
             <thead>
                 <tr>
                     <th>ID</th>
@@ -111,7 +108,7 @@ const DocTemplate = forwardRef((props, ref) => (
                     <th>ភេទ</th>
                     <th>ថ្ងៃខែឆ្នាំកំណើត</th>
                     {courses.map(course => (
-                        <th>{course.khmerName} <br /> {course.theoryCredit + course.practiceCredit} ({course.theoryCredit},{course.practiceCredit})</th>
+                        <th>{course.khmerName} <br /> {course.theoryCredit + course.practiceCredit} ({course.theoryCredit}-{course.practiceCredit})</th>
                     ))}
                     <th>ពិន្ទុសរុប</th>
                     <th>ពិន្ទុមធ្យម</th>
@@ -137,7 +134,7 @@ const DocTemplate = forwardRef((props, ref) => (
                         <tr key={student.id}>
                             <td>{student.id}</td>
                             <td>{student.khmerName}</td>
-                            <td>{student.sex ? 'ប្រុស' : 'ស្រី'}</td>
+                            <td>{student.sex ? 'ប' : 'ស'}</td>
                             <td>{student.birthday}</td>
                             {courses.map(course => {
                                 const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
@@ -150,7 +147,7 @@ const DocTemplate = forwardRef((props, ref) => (
                 })}
             </tbody>
         </table>
-        <table className="footer-table" style={{ width: '100%' }}>
+        <table className="invisible-table">
             <tr>
                 <td>
                     សំគាល់៖ ពិន្ទុដែលទទួលបាន 0.00 ឬ Unsatisfied ជាពិន្ទុប្រឡងធ្លាក់ដែលត្រូវប្រឡងសង។
@@ -175,24 +172,24 @@ const App = () => {
     const docRef = useRef(null);
 
     const download = () => {
-        const contentHTML = docRef.current.innerHTML;
         const fullHTML = `
-            <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='https://www.w3.org/TR/html40'>
-            <head><meta charset='utf-8'>
-            <style>
-                body { font-family: 'Khmer OS Battambang', sans-serif; }
-                table { border-collapse: collapse; width: 100%; }
-                td, th { border: 1pt solid #ccc; padding: 5pt; }
-            </style>
-            </head><body>
-                ${contentHTML}
-            </body></html>
+            <html xmlns:o='urn:schemas-microsoft-com:office:office'
+                  xmlns:w='urn:schemas-microsoft-com:office:word'
+                  xmlns='https://www.w3.org/TR/html40'>
+                <head>
+                    <meta charset='utf-8'>
+                </head>
+                <body>
+                    ${docRef.current.innerHTML}
+                </body>
+            </html>
         `;
-
-        const element = document.createElement('a');
-        element.href = `data:application/vnd.ms-word,${encodeURIComponent(fullHTML)}`;
-        element.download = `class_report.doc`;
-        element.click();
+        const blob = new Blob([fullHTML], { type: 'application/msword' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'export.doc';
+        a.click();
+        URL.revokeObjectURL(a.href);
     };
 
     return (<>

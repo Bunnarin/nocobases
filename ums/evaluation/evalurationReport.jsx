@@ -66,25 +66,18 @@ const AnswerCell = ({ type, answers, showAiSummary }) => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (showAiSummary && type !== 'mcq' && type !== 'checkbox' && answers) {
-      if (answers.aiResult) {
-        setAiResult(answers.aiResult);
-        return;
-      }
-      const answerList = Object.entries(answers).flatMap(([key, value]) => Array(value).fill(key));
-      if (answerList.length === 0) {
-        setAiResult("");
-        return;
-      }
-      setLoading(true);
-      summarize(answerList)
-        .then((summary) => {
-          setAiResult(summary);
-          answers.aiResult = summary;
-        })
-        .catch((error) => setAiResult(error.message))
-        .finally(() => setLoading(false));
-    }
+    if (!showAiSummary || type === 'mcq' || type === 'checkbox' || !answers) return;
+    if (answers.aiResult) return setAiResult(answers.aiResult);
+    const answerList = Object.entries(answers).flatMap(([key, value]) => Array(value).fill(key));
+    if (answerList.length === 0) return setAiResult("");
+    setLoading(true);
+    summarize(answerList)
+      .then((summary) => {
+        setAiResult(summary);
+        answers.aiResult = summary;
+      })
+      .catch((error) => setAiResult(error.message))
+      .finally(() => setLoading(false));
   }, [showAiSummary, type, answers]);
 
   if (type === 'mcq' || type === 'checkbox') return getPercent(answers);
@@ -119,18 +112,18 @@ const DocTemplate = forwardRef(({ showAiSummary, showCLO, colWidth }, ref) => (
           </div>
 
           {/* Table */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Khmer OS Battambang, sans-serif' }}>
+          <table>
             <thead>
-              <tr style={{ backgroundColor: '#f2f2f2' }}>
-                <th style={{ border: '1pt solid black', padding: '8px', width: `${colWidth}%`, textAlign: 'left' }}>សំណួរ</th>
-                <th style={{ border: '1pt solid black', padding: '8px', textAlign: 'left' }}>ចម្លើយ</th>
+              <tr>
+                <th>សំណួរ</th>
+                <th>ចម្លើយ</th>
               </tr>
             </thead>
             <tbody>
               {questions.map((qs, i) => (
                 <tr key={i}>
-                  <td style={{ border: '1pt solid black', padding: '8px' }}>{qs.label}</td>
-                  <td style={{ border: '1pt solid black', padding: '8px' }}>
+                  <td>{qs.label}</td>
+                  <td>
                     <AnswerCell
                       type={qs.type}
                       answers={result?.[`question${i}`]}
@@ -141,8 +134,8 @@ const DocTemplate = forwardRef(({ showAiSummary, showCLO, colWidth }, ref) => (
               ))}
               {showCLO && CLOs.filter(CLO => CLO.courseId == result.courseId).map((CLO, i) => (
                 <tr key={i + questions.length}>
-                  <td style={{ border: '1pt solid black', padding: '8px' }}>CLO {CLO.number} achieved</td>
-                  <td style={{ border: '1pt solid black', padding: '8px' }}>
+                  <td>CLO {CLO.number} achieved</td>
+                  <td>
                     <AnswerCell
                       type='mcq'
                       answers={result?.[`question${i + questions.length}`]}

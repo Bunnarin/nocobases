@@ -1,5 +1,3 @@
-const { Button } = ctx.libs.antd;
-
 const { data: { data: [semester] } } = await ctx.api.request({
     url: 'semester:list',
     params: {
@@ -36,7 +34,7 @@ const FILE_COLOR = {
 const { React } = ctx.libs;
 const { useState } = React;
 
-const PortfolioTable = () => {
+const App = () => {
     const [loading, setLoading] = useState({});
 
     const handleUpload = async (criteriaId, e) => {
@@ -171,4 +169,4 @@ const styles = {
     }
 };
 
-ctx.render(<PortfolioTable />);
+ctx.render(<App />);

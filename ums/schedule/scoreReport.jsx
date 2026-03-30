@@ -51,29 +51,23 @@ const plos = Object.values(ploMap).sort((a, b) => (a.number || 0) - (b.number ||
 
 // 4. Sub-components
 const DocTemplate = React.forwardRef((props, ref) => (
-    <div ref={ref} style={{ fontFamily: 'Khmer OS Battambang, Arial, sans-serif' }}>
+    <div ref={ref}>
         <style>{`
-            th {
-                border: 1pt solid #ccc;
-                padding: 8px;
+            table, p {
+                font-family: 'Khmer OS Battambang', sans-serif;
+                font-size: 10px;
+                border-collapse: collapse;
+                width: 100%;
+            }
+            td, th {
                 text-align: center;
-                background-color: #f2f2f2;
-            }
-            td {
-                text-align: center;
                 border: 1pt solid #ccc;
-                padding: 8px;
             }
-            .header-table td {
+            .invisible-table td {
                 border: none;
-                width: 30%;
-            }
-            .footer-table td {
-                border: none;
-                width: 50%;
             }
         `}</style>
-        <table className="header-table" style={{ width: '100%', marginBottom: '20px' }}>
+        <table className="invisible-table">
             <tr>
                 <td>
                     <br /><br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}
@@ -91,7 +85,7 @@ const DocTemplate = React.forwardRef((props, ref) => (
             <br />
             {schedule.course.khmerName} ថ្នាក់ {schedule.class.name}
         </p>
-        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '11px', border: '1pt solid #000' }}>
+        <table>
             <thead>
                 <tr>
                     <th>ID</th>
@@ -152,7 +146,7 @@ const DocTemplate = React.forwardRef((props, ref) => (
                 })}
             </tbody>
         </table>
-        <table className="footer-table" style={{ width: '100%' }}>
+        <table className="invisible-table">
             <tr>
                 <td>
                     សំគាល់៖ ពិន្ទុដែលទទួលបាន 0.00 ឬ Unsatisfied ជាពិន្ទុប្រឡងធ្លាក់ដែលត្រូវប្រឡងសង។
@@ -178,28 +172,23 @@ const App = () => {
     const docRef = useRef(null);
 
     const download = () => {
-        const contentHTML = docRef.current.innerHTML;
         const fullHTML = `
-            <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='https://www.w3.org/TR/html40'>
-            <head><meta charset='utf-8'>
-            <style>
-                body { font-family: 'Khmer OS Battambang', sans-serif; }
-                table { border-collapse: collapse; width: 100%; border: 1pt solid #000; }
-                td, th { border: 1pt solid #000; padding: 5pt; text-align: center; }
-                .text-left { text-align: left; }
-            </style>
-            </head><body>
-                ${contentHTML}
-            </body></html>
+            <html xmlns:o='urn:schemas-microsoft-com:office:office'
+                  xmlns:w='urn:schemas-microsoft-com:office:word'
+                  xmlns='https://www.w3.org/TR/html40'>
+                <head>
+                    <meta charset='utf-8'>
+                </head>
+                <body>
+                    ${docRef.current.innerHTML}
+                </body>
+            </html>
         `;
-
         const blob = new Blob([fullHTML], { type: 'application/msword' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `Score_Report_${schedule.course?.name || 'export'}.doc`;
-        link.click();
-        URL.revokeObjectURL(url);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.click();
+        URL.revokeObjectURL(a.href);
     };
 
     return (<>
