@@ -44,11 +44,9 @@ const { data: { data: students } } = await ctx.api.request({
                 }
             ]
         },
-        appends: 'background,background.province,scholarshipSource,major,classes,user'
+        appends: 'background,background.province,scholarshipSource,major,major.faculty,classes,user'
     }
 });
-
-const degreeMap = ['AD', 'BSc', 'MSc', 'PhD', 'DVM'];
 
 // for some reason the react style block have some power over the doc download, except the font
 const DocTemplate = forwardRef(({ selectedYear }, ref) => (
@@ -96,38 +94,65 @@ const DocTemplate = forwardRef(({ selectedYear }, ref) => (
                     <th>ថ្ងៃខែឆ្នាំកំណើត</th>
                     <th>មកពី</th>
                     <th>កម្រិត</th>
-                    {programId == 1 && <th>ជំនាញ</th>}
                     <th>ថ្នាក់</th>
                     <th>អាហារូបករណ៍</th>
                     <th>លេខទូរស័ព្ទ</th>
                 </tr>
             </thead>
             <tbody>
-                {students.filter(s => s.year == selectedYear).map((student, i) => (
-                    <tr key={student.id}>
-                        <td>{i + 1}</td>
-                        <td>{student.id}</td>
-                        <td>{student.oldId}</td>
-                        <td>{student.khmerName}</td>
-                        <td>{student.englishName}</td>
-                        <td>{student.sex ? 'ស' : 'ប'}</td>
-                        <td>{student.birthday}</td>
-                        <td>{student.background?.province?.name}</td>
-                        <td>{degreeMap[student.major.degree]}</td>
-                        {programId == 1 && <td>{student.major.abbreviation}</td>}
-                        <td>{student.classes.find(cls => cls.programId == programId)?.name}</td>
-                        <td>
-                            {student.scholarshipSource ? student.scholarshipSource.name + (student.scholarshipCoverage < 100 ? student.scholarshipCoverage : '') : 'បង់ថ្លៃ'}
-                        </td>
-                        <td>{student.user.phone}</td>
-                    </tr>
-                ))}
+                {(() => {
+                    const filtered = students.filter(s => s.year == selectedYear);
+                    const groups = {};
+                    filtered.forEach(student => {
+                        const faculty = student.major?.faculty;
+                        const facultyId = faculty?.id || 'unknown';
+                        if (!groups[facultyId]) groups[facultyId] = { faculty, students: [] };
+                        groups[facultyId].students.push(student);
+                    });
+
+                    let globalIndex = 0;
+                    return Object.values(groups).map((group) => (
+                        <React.Fragment key={group.faculty?.id || 'unknown'}>
+                            <tr>
+                                <td colSpan="12" style={{ fontWeight: 'bold', textAlign: 'left', backgroundColor: '#e2e2e2', padding: '4px 8px' }}>
+                                    មហាវិទ្យាល័យ{group.faculty?.khmerName}
+                                </td>
+                            </tr>
+                            {group.students.map(s => {
+                                globalIndex++;
+                                return (
+                                    <tr key={s.id}>
+                                        <td>{globalIndex}</td>
+                                        <td>{s.id}</td>
+                                        <td>{s.oldId}</td>
+                                        <td>{s.khmerName}</td>
+                                        <td>{s.englishName}</td>
+                                        <td>{s.sex}</td>
+                                        <td>{s.birthday}</td>
+                                        <td>{s.background?.province?.name}</td>
+                                        <td>{['AD', 'BSc', 'MSc', 'PhD', 'DVM'][s.major?.degree]}</td>
+                                        <td>{s.classes.find(cls => cls.programId == programId)?.name}</td>
+                                        <td>
+                                            {s.scholarshipSource ? s.scholarshipSource.name + (s.scholarshipCoverage < 100 ? s.scholarshipCoverage : '') : 'បង់ថ្លៃ'}
+                                        </td>
+                                        <td>{s.user.phone}</td>
+                                    </tr>
+                                );
+                            })}
+                            <tr>
+                                <td colSpan="12" style={{ textAlign: 'left' }}>
+                                    សរុប៖ {group.students.length} នាក់ (ស្រី៖ {group.students.filter(s => s.sex == 'F').length} នាក់)
+                                </td>
+                            </tr>
+                        </React.Fragment>
+                    ));
+                })()}
             </tbody>
         </table>
         <table className="invisible-table">
             <tr>
                 <td>
-                    ចំនួននិស្សិតសរុប៖ {students.filter(s => s.year == selectedYear).length}នាក់ (ស្រី៖ {students.filter(s => s.year == selectedYear && s.sex).length}នាក់)
+                    ចំនួននិស្សិតសរុប៖ {students.filter(s => s.year == selectedYear).length}នាក់ (ស្រី៖ {students.filter(s => s.year == selectedYear && s.sex == 'F').length}នាក់)
                     <br /><br />
                     បានឃើញ និងឯកភាព
                     <br />
@@ -137,14 +162,14 @@ const DocTemplate = forwardRef(({ selectedYear }, ref) => (
                     បានពិនិត្យត្រឹមត្រូវ
                     <br />
                     នាយកមជ្ឈមណ្ឌលសិក្សានិងសេវានិស្សិត
-                    <br /><br /><br /><br />
+                </td>
+                <td>
                     ថ្ងៃ ខែ ឆ្នាំម្សាញ់ សប្តស័ក ព.ស ២៥៦៩
                     <br />
                     រាជធានីភ្នំពេញ, ថ្ងៃទី ខែ ឆ្នាំ ២០២៦
                     <br />
                     ព្រឺទ្ធបុរស
                 </td>
-                <td></td>
             </tr>
         </table>
     </div>
@@ -154,23 +179,33 @@ const App = () => {
     const docRef = useRef(null);
     const [selectedYear, setSelectedYear] = useState(programId == 1 ? 1 : 2);
 
-    const download = () => {
+    const download = (isExcel = false) => {
         const fullHTML = `
             <html xmlns:o='urn:schemas-microsoft-com:office:office'
-                  xmlns:w='urn:schemas-microsoft-com:office:word'
+                  xmlns:w='urn:schemas-microsoft-com:office:${isExcel ? 'excel' : 'word'}'
                   xmlns='https://www.w3.org/TR/html40'>
                 <head>
                     <meta charset='utf-8'>
+                    <style>
+                        @page Section1 {
+                            size: 841.9pt 595.3pt;
+                            mso-page-orientation: landscape;
+                            margin: 1in 1in 1in 1in;
+                        }
+                        div.Section1 { page: Section1; }
+                    </style>
                 </head>
                 <body>
-                    ${docRef.current.innerHTML}
+                    <div class="Section1">
+                        ${docRef.current.innerHTML}
+                    </div>
                 </body>
             </html>
         `;
-        const blob = new Blob([fullHTML], { type: 'application/msword' });
+        const blob = new Blob([fullHTML], { type: isExcel ? 'application/vnd.ms-excel' : 'application/msword' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'export.doc';
+        a.download = isExcel ? 'export.xls' : 'export.doc';
         a.click();
         URL.revokeObjectURL(a.href);
     };
@@ -188,7 +223,8 @@ const App = () => {
             ]}
             style={{ marginRight: '10px', marginBottom: '10px' }}
         />
-        <Button type="primary" onClick={download}>download</Button>
+        <Button type="primary" onClick={() => download(false)}>download word</Button>
+        <Button onClick={() => download(true)}>download excel</Button>
         <DocTemplate selectedYear={selectedYear} ref={docRef} />
     </>);
 };

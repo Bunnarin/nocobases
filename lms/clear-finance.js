@@ -1,6 +1,6 @@
 console.log('student: ', student);
 console.log('sem: ', semesterNum);
-console.log('foundation major: ', foundationMajor)
+console.log('foundation major: ', foundationMajor);
 
 // need to handle first year as well
 const auditLogs = [student.balance];

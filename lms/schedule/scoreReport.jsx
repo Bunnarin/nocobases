@@ -36,14 +36,10 @@ const ploMap = {};
 
 weights.filter(w => w.courseId == schedule.course.id)
     .forEach(w => {
-        if (w.CLO) {
-            cloMap[w.CLO.id] ??= { ...w.CLO, weightIds: [] };
-            cloMap[w.CLO.id].weightIds.push(w.id);
-        }
-        if (w.PLO) {
-            ploMap[w.PLO.id] ??= { ...w.PLO, weightIds: [] };
-            ploMap[w.PLO.id].weightIds.push(w.id);
-        }
+        cloMap[w.CLO.id] ??= { ...w.CLO, weightIds: [] };
+        cloMap[w.CLO.id].weightIds.push(w.id);
+        ploMap[w.PLO.id] ??= { ...w.PLO, weightIds: [] };
+        ploMap[w.PLO.id].weightIds.push(w.id);
     });
 
 const clos = Object.values(cloMap).sort((a, b) => (a.number || 0) - (b.number || 0));
@@ -119,9 +115,7 @@ const DocTemplate = React.forwardRef((props, ref) => (
                         <tr key={student.id}>
                             <td>{student.id}</td>
                             <td>{student.khmerName}</td>
-                            <td>
-                                {student.birthday ? new Date(student.birthday).toLocaleDateString('en-GB') : '-'}
-                            </td>
+                            <td>{student.birthday}</td>
                             {clos.map(clo => {
                                 let cloHasMakeup = false;
                                 const cloScore = clo.weightIds.reduce((sum, wid) => {
@@ -171,10 +165,10 @@ const DocTemplate = React.forwardRef((props, ref) => (
 const App = () => {
     const docRef = useRef(null);
 
-    const download = () => {
+    const download = (isExcel = false) => {
         const fullHTML = `
             <html xmlns:o='urn:schemas-microsoft-com:office:office'
-                  xmlns:w='urn:schemas-microsoft-com:office:word'
+                  xmlns:w='urn:schemas-microsoft-com:office:${isExcel ? 'excel' : 'word'}'
                   xmlns='https://www.w3.org/TR/html40'>
                 <head>
                     <meta charset='utf-8'>
@@ -184,15 +178,17 @@ const App = () => {
                 </body>
             </html>
         `;
-        const blob = new Blob([fullHTML], { type: 'application/msword' });
+        const blob = new Blob([fullHTML], { type: isExcel ? 'application/vnd.ms-excel' : 'application/msword' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
+        a.download = isExcel ? 'export.xls' : 'export.doc';
         a.click();
         URL.revokeObjectURL(a.href);
     };
 
     return (<>
-        <Button type="primary" onClick={download}>Download Report</Button>
+        <Button type="primary" onClick={() => download(false)}>download word</Button>
+        <Button onClick={() => download(true)}>download excel</Button>
         <DocTemplate ref={docRef} />
     </>);
 };

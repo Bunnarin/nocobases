@@ -159,23 +159,26 @@ const App = () => {
   const [colWidth, setColWidth] = useState(35);
   const docRef = useRef(null);
 
-  const download = () => {
+  const download = (isExcel = false) => {
     const fullHTML = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='https://www.w3.org/TR/html40'>
-      <head>
-        <meta charset='utf-8'>
-      </head>
-      <body>
-        ${docRef.current.innerHTML}
-      </body>
+      <html 
+        xmlns:o='urn:schemas-microsoft-com:office:office' 
+        xmlns:w='urn:schemas-microsoft-com:office:${isExcel ? 'excel' : 'word'}' 
+        xmlns='https://www.w3.org/TR/html40'>
+        <head>
+          <meta charset='utf-8'>
+        </head>
+        <body>
+          ${docRef.current.innerHTML}
+        </body>
       </html>
     `;
 
-    const blob = new Blob([fullHTML], { type: 'application/msword' });
+    const blob = new Blob([fullHTML], { type: isExcel ? 'application/vnd.ms-excel' : 'application/msword' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Evaluation_Report.doc`;
+    link.download = isExcel ? 'Evaluation_Report.xls' : 'Evaluation_Report.doc';
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -186,7 +189,8 @@ const App = () => {
         position: 'sticky', top: 0, background: '#fff', padding: '12px 20px',
         borderBottom: '1px solid #d9d9d9', zIndex: 100, display: 'flex', gap: '20px', alignItems: 'center'
       }}>
-        <Button onClick={download} type="primary">Download</Button>
+        <Button onClick={() => download(false)} type="primary">download word</Button>
+        <Button onClick={() => download(true)}>download excel</Button>
 
         <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <Checkbox checked={showCLO} onChange={(e) => setShowCLO(e.target.checked)} />

@@ -44,20 +44,36 @@ const specialCourseIds = [123, 109, 99];
 const courses = classs.schedules.map(schedule => schedule.course)
     .sort((a, b) => specialCourseIds.indexOf(a.id) - specialCourseIds.indexOf(b.id));
 
+let englishCourseSpec;
+const hasEngish = courses.find(c => c.englishName.toLowerCase() == 'english');
+if (hasEngish)
+    await ctx.api.request({
+        url: 'KV:get',
+        params: {
+            filterByTk: 'englishCourseSpec'
+        }
+    }).then(res => englishCourseSpec = JSON.parse(res.data.data.value));
+
 const getCourseInfo = (scores, courseId) => {
     const courseScores = scores.filter(score => score.weight.courseId === courseId);
-    const totalScore = courseScores.reduce((acc, score) => acc + score.value, 0);
+    let total = courseScores.reduce((acc, score) => acc + score.value, 0);
     const hasMakeup = courseScores.some(score => score.makeup);
 
-    let displayValue = totalScore;
+    let displayValue = total;
+    // different pass logic for LC
     if (courseId == 123) {
-        const englishPassThreshold = semester.number == 1 ? 8 : 13;
-        const average = totalScore / courseScores.length;
-        displayValue = average >= englishPassThreshold ? 'sastified' : 'unsastified';
+        total = 0;
+        englishCourseSpec.weights.forEach(({ id, weight }) => {
+            const entry = courseScores.find(s => s.weightId == id);
+            total += entry?.value * weight / 100;
+        });
+        total = Math.round(total);
+        const passThreshold = englishCourseSpec.semesterPassThresholds[semester.number - 1];
+        displayValue = total >= passThreshold ? 'sastified' : 'unsastified';
     } else if (courseId == 109 || courseId == 99)
-        displayValue = totalScore >= 50 ? 'sastified' : 'unsastified';
+        displayValue = total >= 50 ? 'sastified' : 'unsastified';
 
-    return { totalScore, displayValue, hasMakeup };
+    return { total, displayValue, hasMakeup };
 }
 
 const getGPAInfo = (scores, courseId) => {
@@ -103,6 +119,7 @@ const DocTemplate = forwardRef((props, ref) => (
         <table>
             <thead>
                 <tr>
+                    <th>ល.រ.</th>
                     <th>ID</th>
                     <th>ឈ្មោះ</th>
                     <th>ភេទ</th>
@@ -115,14 +132,15 @@ const DocTemplate = forwardRef((props, ref) => (
                 </tr>
             </thead>
             <tbody>
-                {students.map(student => {
+                {students.map((student, idx) => {
                     let studentHasMakeup = false;
                     const weightedTotalScore = courses.reduce((acc, course) => {
-                        const { totalScore, displayValue, hasMakeup } = getCourseInfo(student.scores, course.id);
+                        const { total, displayValue, hasMakeup } = getCourseInfo(student.scores, course.id);
                         if (hasMakeup) studentHasMakeup = true;
+                        // exclude the special courses
                         if (isNaN(displayValue)) return acc;
                         const credit = course.theoryCredit + course.practiceCredit;
-                        return acc + totalScore * credit;
+                        return acc + total * credit;
                     }, 0);
                     const totalCredit = courses.reduce((acc, course) => {
                         const { displayValue } = getCourseInfo(student.scores, course.id);
@@ -132,9 +150,10 @@ const DocTemplate = forwardRef((props, ref) => (
                     }, 0);
                     return (
                         <tr key={student.id}>
+                            <td>{idx + 1}</td>
                             <td>{student.id}</td>
                             <td>{student.khmerName}</td>
-                            <td>{student.sex ? 'ប' : 'ស'}</td>
+                            <td>{student.sex}</td>
                             <td>{student.birthday}</td>
                             {courses.map(course => {
                                 const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
@@ -171,29 +190,48 @@ const DocTemplate = forwardRef((props, ref) => (
 const App = () => {
     const docRef = useRef(null);
 
-    const download = () => {
-        const fullHTML = `
+    const download = (isExcel = false) => {
+        const download = (isExcel = false) => {
+            const fullHTML = `
             <html xmlns:o='urn:schemas-microsoft-com:office:office'
-                  xmlns:w='urn:schemas-microsoft-com:office:word'
+                  xmlns:w='urn:schemas-microsoft-com:office:${isExcel ? 'excel' : 'word'}'
                   xmlns='https://www.w3.org/TR/html40'>
                 <head>
                     <meta charset='utf-8'>
+                    <style>
+                        @page Section1 {
+                            size: 841.9pt 595.3pt;
+                            mso-page-orientation: landscape;
+                            margin: 1in 1in 1in 1in;
+                        }
+                        div.Section1 { page: Section1; }
+                    </style>
                 </head>
                 <body>
-                    ${docRef.current.innerHTML}
+                    <div class="Section1">
+                        ${docRef.current.innerHTML}
+                    </div>
                 </body>
             </html>
         `;
-        const blob = new Blob([fullHTML], { type: 'application/msword' });
+            const blob = new Blob([fullHTML], { type: isExcel ? 'application/vnd.ms-excel' : 'application/msword' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = isExcel ? 'export.xls' : 'export.doc';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        };
+        const blob = new Blob([fullHTML], { type: isExcel ? 'application/vnd.ms-excel' : 'application/msword' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'export.doc';
+        a.download = isExcel ? 'export.xls' : 'export.doc';
         a.click();
         URL.revokeObjectURL(a.href);
     };
 
     return (<>
-        <Button type="primary" onClick={download} style={{ marginBottom: '10px' }}>download</Button>
+        <Button type="primary" onClick={() => download(false)}>download word</Button>
+        <Button onClick={() => download(true)}>download excel</Button>
         <DocTemplate ref={docRef} />
     </>);
 };

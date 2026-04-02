@@ -56,9 +56,8 @@ if (closerToEnd) {
 const App = () => {
   const [formData, setFormData] = useState({});
 
-  const handleInputChange = (label, value) => {
+  const handleInputChange = (label, value) =>
     setFormData(prev => ({ ...prev, [label]: value }));
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -66,13 +65,9 @@ const App = () => {
       return ctx.message.error('Deadline has passed. You cannot submit changes.');
 
     // Validate required fields
-    for (const field of questions) {
-      if (field.required) {
-        const value = formData[field.label];
-        if (!value || (Array.isArray(value) && value.length === 0))
-          return ctx.message.error(`Please answer: ${field.label}`);
-      }
-    }
+    for (const field of questions)
+      if (field.required && !formData[field.label])
+        return ctx.message.error(`Please answer: ${field.label}`);
 
     // so that the fetched answer counter dont get stale
     const { data: { data: schedule } } = await ctx.api.request({

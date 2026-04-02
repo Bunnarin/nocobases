@@ -103,6 +103,7 @@ const PLOTable = ({ plo }) => {
             <table>
                 <thead>
                     <tr>
+                        <th rowSpan={2}>ល.រ.</th>
                         <th rowSpan={2}>ID</th>
                         <th rowSpan={2}>Name</th>
                         {ploCLOs.map(clo => (
@@ -118,10 +119,8 @@ const PLOTable = ({ plo }) => {
                         <th>100%</th>
                         <th>grade</th>
                     </tr>
-                </thead>
-                <tbody>
                     <tr>
-                        <td colSpan={2}>CW = weight x credit ({credit})</td>
+                        <td colSpan={3}>CW = weight x credit ({credit})</td>
                         {ploCLOs.map(clo => (
                             <td key={clo.id}>
                                 {(clo.totalWeight * credit / 100).toFixed(2)}
@@ -131,8 +130,11 @@ const PLOTable = ({ plo }) => {
                             {(ploMaxWeight * credit / 100).toFixed(2)}
                         </td>
                     </tr>
+                </thead>
+                <tbody>
                     {studentResults.map((res, idx) => (
                         <tr key={res.student.id}>
+                            <td>{idx + 1}</td>
                             <td>{res.student.id}</td>
                             <td>{res.student.khmerName}</td>
                             {res.cloScores.map((score, i) => (
@@ -224,10 +226,10 @@ const DocTemplate = React.forwardRef((props, ref) => (
 const App = () => {
     const docRef = useRef(null);
 
-    const download = () => {
+    const download = (isExcel = false) => {
         const fullHTML = `
             <html xmlns:o='urn:schemas-microsoft-com:office:office'
-                  xmlns:w='urn:schemas-microsoft-com:office:word'
+                  xmlns:x='urn:schemas-microsoft-com:office:${isExcel ? 'excel' : 'word'}'
                   xmlns='https://www.w3.org/TR/html40'>
                 <head>
                     <meta charset='utf-8'>
@@ -237,16 +239,17 @@ const App = () => {
                 </body>
             </html>
         `;
-        const blob = new Blob([fullHTML], { type: 'application/msword' });
+        const blob = new Blob([fullHTML], { type: isExcel ? 'application/vnd.ms-excel' : 'application/msword' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'export.doc';
+        a.download = isExcel ? 'export.xls' : 'export.doc';
         a.click();
         URL.revokeObjectURL(a.href);
     };
 
     return (<>
-        <Button type="primary" onClick={download}>download</Button>
+        <Button type="primary" onClick={() => download(false)}>download word</Button>
+        <Button onClick={() => download(true)}>download excel</Button>
         <DocTemplate ref={docRef} />
     </>);
 };

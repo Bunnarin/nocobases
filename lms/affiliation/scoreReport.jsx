@@ -39,8 +39,20 @@ const { data: { data: classes } } = await ctx.api.request({
 
 const students = classes.flatMap(cls => cls.students);
 // stringify cuz set cannot compare objects
+const specialCourseIds = [123, 109, 99];
 let courses = classes.flatMap(cls => cls.schedules).map(schedule => JSON.stringify(schedule.course));
-courses = [...new Set(courses)].map(course => JSON.parse(course));
+courses = [...new Set(courses)].map(course => JSON.parse(course))
+    .sort((a, b) => specialCourseIds.indexOf(a.id) - specialCourseIds.indexOf(b.id));
+
+let englishCourseSpec;
+const hasEngish = courses.find(c => c.englishName.toLowerCase() == 'english');
+if (hasEngish)
+    await ctx.api.request({
+        url: 'KV:get',
+        params: {
+            filterByTk: 'englishCourseSpec'
+        }
+    }).then(res => englishCourseSpec = JSON.parse(res.data.data.value));
 
 const gradeMap = (gpa) => {
     if (gpa >= 4.00) return 'A';
@@ -67,24 +79,28 @@ const getGPAInfo = (scores, courseId) => {
 }
 
 const getScoreInfo = (scores, courseId) => {
-    let totalScore = 0;
+    let total = 0;
     let hasMakeup = false;
-    const relevantScores = scores.filter(s => s.weight.courseId === courseId);
-    relevantScores.forEach(score => {
-        totalScore += score.value;
+    const courseScores = scores.filter(s => s.weight.courseId === courseId);
+    courseScores.forEach(score => {
+        total += score.value;
         if (score.makeup) hasMakeup = true;
     });
 
-    let displayValue = totalScore;
+    let displayValue = total;
     if (courseId == 123) {
-        const englishPassThreshold = semester.number == 1 ? 8 : 13;
-        const numOfWeight = relevantScores.length;
-        displayValue = totalScore / numOfWeight >= englishPassThreshold ? 'sastified' : 'unsastified';
-    } else if (courseId == 109 || courseId == 99) {
-        displayValue = GPAMap(totalScore) >= 2.00 ? 'sastified' : 'unsastified';
-    }
+        total = 0;
+        englishCourseSpec.weights.forEach(({ id, weight }) => {
+            const entry = courseScores.find(s => s.weightId == id);
+            total += entry?.value * weight / 100;
+        });
+        const passThreshold = englishCourseSpec.semesterPassThresholds[semester.number - 1];
+        total = Math.round(total);
+        displayValue = total >= passThreshold ? 'sastified' : 'unsastified';
+    } else if (courseId == 109 || courseId == 99)
+        displayValue = total >= 50 ? 'sastified' : 'unsastified';
 
-    return { totalScore, displayValue, hasMakeup };
+    return { total, displayValue, hasMakeup };
 }
 
 const DocTemplate = forwardRef((props, ref) => (
@@ -142,8 +158,8 @@ const DocTemplate = forwardRef((props, ref) => (
             <tbody>
                 {students.map(student => {
                     let studentHasMakeup = false;
-                    const totalScore = courses.reduce((acc, course) => {
-                        const { totalScore: val, hasMakeup } = getScoreInfo(student.scores, course.id);
+                    const total = courses.reduce((acc, course) => {
+                        const { total: val, hasMakeup } = getScoreInfo(student.scores, course.id);
                         if (hasMakeup) studentHasMakeup = true;
                         if (isNaN(val)) return acc;
                         return acc + val;
@@ -162,7 +178,7 @@ const DocTemplate = forwardRef((props, ref) => (
                                 const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
                                 return <td key={course.id}>{value}{hasMakeup ? '*' : ''}</td>;
                             })}
-                            <td>{totalScore}{studentHasMakeup ? '*' : ''}</td>
+                            <td>{total}{studentHasMakeup ? '*' : ''}</td>
                             <td>{averageGPA.toFixed(2)}{studentHasMakeup ? '*' : ''}</td>
                             <td>{gradeMap(averageGPA)}{studentHasMakeup ? '*' : ''}</td>
                         </tr>
@@ -194,29 +210,40 @@ const DocTemplate = forwardRef((props, ref) => (
 const App = () => {
     const docRef = useRef(null);
 
-    const download = () => {
+    const download = (isExcel = false) => {
         const fullHTML = `
             <html xmlns:o='urn:schemas-microsoft-com:office:office'
-                  xmlns:w='urn:schemas-microsoft-com:office:word'
+                  xmlns:w='urn:schemas-microsoft-com:office:${isExcel ? 'excel' : 'word'}'
                   xmlns='https://www.w3.org/TR/html40'>
                 <head>
                     <meta charset='utf-8'>
+                    <style>
+                        @page Section1 {
+                            size: 841.9pt 595.3pt;
+                            mso-page-orientation: landscape;
+                            margin: 1in 1in 1in 1in;
+                        }
+                        div.Section1 { page: Section1; }
+                    </style>
                 </head>
                 <body>
-                    ${docRef.current.innerHTML}
+                    <div class="Section1">
+                        ${docRef.current.innerHTML}
+                    </div>
                 </body>
             </html>
         `;
-        const blob = new Blob([fullHTML], { type: 'application/msword' });
+        const blob = new Blob([fullHTML], { type: isExcel ? 'application/vnd.ms-excel' : 'application/msword' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'export.doc';
+        a.download = isExcel ? 'export.xls' : 'export.doc';
         a.click();
         URL.revokeObjectURL(a.href);
     };
 
     return (<>
-        <Button type="primary" onClick={download} style={{ marginBottom: '10px' }}>download</Button>
+        <Button type="primary" onClick={() => download(false)} style={{ marginBottom: '10px' }}>download word</Button>
+        <Button onClick={() => download(true)} style={{ marginBottom: '10px' }}>download excel</Button>
         <DocTemplate ref={docRef} />
     </>);
 };

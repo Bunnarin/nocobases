@@ -126,6 +126,7 @@ const SummaryTable = () => {
             <table>
                 <thead>
                     <tr>
+                        <th>ល.រ.</th>
                         <th>ID</th>
                         <th>Name</th>
                         {summaryCLOs.map(clo => (
@@ -140,6 +141,7 @@ const SummaryTable = () => {
                 <tbody>
                     {summaryStudents.map((item, idx) => (
                         <tr key={item.student.id}>
+                            <td>{idx + 1}</td>
                             <td>{item.student.id}</td>
                             <td>{item.student.khmerName}</td>
                             {item.cloScores.map((score, i) => (
@@ -310,22 +312,20 @@ const CLOTable = ({ clo }) => {
 };
 
 // 5. App / DocTemplate
-const DocTemplate = React.forwardRef((props, ref) => {
-    return (
-        <div ref={ref}>
-            <SummaryTable />
-            {CLOs.map(clo => (<CLOTable key={clo.id} clo={clo} />))}
-        </div>
-    );
-});
+const DocTemplate = React.forwardRef((props, ref) => (
+    <div ref={ref}>
+        <SummaryTable />
+        {CLOs.map(clo => (<CLOTable key={clo.id} clo={clo} />))}
+    </div>
+));
 
 const App = () => {
     const docRef = useRef(null);
 
-    const download = () => {
+    const download = (isExcel = false) => {
         const fullHTML = `
             <html xmlns:o='urn:schemas-microsoft-com:office:office'
-                  xmlns:w='urn:schemas-microsoft-com:office:word'
+                  xmlns:x='urn:schemas-microsoft-com:office:${isExcel ? 'excel' : 'word'}'
                   xmlns='https://www.w3.org/TR/html40'>
                 <head>
                     <meta charset='utf-8'>
@@ -335,16 +335,17 @@ const App = () => {
                 </body>
             </html>
         `;
-        const blob = new Blob([fullHTML], { type: 'application/msword' });
+        const blob = new Blob([fullHTML], { type: isExcel ? 'application/vnd.ms-excel' : 'application/msword' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'export.doc';
+        a.download = isExcel ? 'export.xls' : 'export.doc';
         a.click();
         URL.revokeObjectURL(a.href);
     };
 
     return (<>
-        <Button type="primary" onClick={download}>download</Button>
+        <Button type="primary" onClick={() => download(false)}>download word</Button>
+        <Button onClick={() => download(true)}>download excel</Button>
         <DocTemplate ref={docRef} />
     </>);
 };
