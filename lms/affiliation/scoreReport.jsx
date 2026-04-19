@@ -1,3 +1,5 @@
+const resObj = (res) => Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
+
 const { React } = ctx.libs;
 const { useRef, forwardRef } = React;
 const { Button } = ctx.libs.antd;
@@ -7,15 +9,22 @@ const programId = await ctx.getVar('ctx.popup.resource.filterByTk');
 const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
-        sort: '-startDate',
-        limit: 3
+        filter: {
+            $or:
+                [{ startDate: { $dateOn: { type: "lastYear" } } },
+                { startDate: { $dateOn: { type: "thisYear" } } },
+                { startDate: { $dateOn: { type: "nextYear" } } }]
+        }
     }
 });
 
-// find the semester whose endDate is closest to now
+// find the semester whose middle is closest to now
 const semester = semesters.reduce((prev, curr) => {
-    const prevDiff = Math.abs(new Date(prev.endDate).getTime() - now.getTime());
-    const currDiff = Math.abs(new Date(curr.endDate).getTime() - now.getTime());
+    const time = (dateStr) => new Date(dateStr).getTime();
+    const prevMiddle = time(prev.startDate) + (time(prev.endDate) - time(prev.startDate)) / 2;
+    const currMiddle = time(curr.startDate) + (time(curr.endDate) - time(curr.startDate)) / 2;
+    const prevDiff = Math.abs(prevMiddle - new Date().getTime());
+    const currDiff = Math.abs(currMiddle - new Date().getTime());
     return currDiff < prevDiff ? curr : prev;
 });
 
@@ -52,7 +61,7 @@ if (hasEngish)
         params: {
             filterByTk: 'englishCourseSpec'
         }
-    }).then(res => englishCourseSpec = JSON.parse(res.data.data.value));
+    }).then(res => englishCourseSpec = JSON.parse(resObj(res).value));
 
 const gradeMap = (gpa) => {
     if (gpa >= 4.00) return 'A';
@@ -103,109 +112,103 @@ const getScoreInfo = (scores, courseId) => {
     return { total, displayValue, hasMakeup };
 }
 
-const DocTemplate = forwardRef((props, ref) => (
-    <div ref={ref}>
-        <style>{`
-            td, th {
-                text-align: center;
-                border: 1pt solid #ccc;
-                padding: 8px;
-            }
-            .invisible-table td {
-                border: none;
-                width: 30%;
-            }
-            .invisible-table td {
-                border: none;
-                width: 50%;
-            }
-        `}</style>
-        <table className="invisible-table">
+const DocTemplate = forwardRef((props, ref) => (<div ref={ref}>
+    <style>{`
+        table, p {
+            font-family: 'Khmer OS Battambang', sans-serif;
+            border-collapse: collapse;
+            width: 100%;
+        }
+        td, th {
+            text-align: center;
+            border: 1pt solid #ccc;
+        }
+        .invisible-table td {
+            border: none;
+            text-align: center;
+        }
+    `}</style>
+    <table className="invisible-table">
+        <tr>
+            <td>
+                <br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}
+            </td>
+            <td></td>
+            <td>
+                ព្រះរាជាណាចក្រកម្ពុជា<br />ជាតិ សាសនា ព្រះមហាក្សត្រ
+            </td>
+        </tr>
+    </table>
+    <p style={{ textAlign: 'center' }}>
+        លទ្ធផលប្រឡងឆមាសទី {semester.number} និស្សិតឆ្នាំទី {students[0].year} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
+        <br />{program.khmerName}
+    </p>
+    <table>
+        <thead>
             <tr>
-                <td>
-                    <br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}
-                </td>
-                <td></td>
-                <td>
-                    ព្រះរាជាណាចក្រកម្ពុជា<br />ជាតិ សាសនា ព្រះមហាក្សត្រ
-                </td>
+                <th rowSpan={2}>ID</th>
+                <th rowSpan={2}>ឈ្មោះ</th>
+                {courses.map(c => (<th>{c.khmerName}</th>))}
+                <th rowSpan={2}>ពិន្ទុសរុប</th>
+                <th rowSpan={2}>GPA</th>
+                <th rowSpan={2}>Grade</th>
             </tr>
-        </table>
-        <p style={{ textAlign: 'center' }}>
-            លទ្ធផលប្រឡងឆមាសទី {semester.number} និស្សិតឆ្នាំទី {students[0].year} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
-            <br />{program.khmerName}
-        </p>
-        <table>
-            <thead>
-                <tr>
-                    <th rowSpan={2}>ID</th>
-                    <th rowSpan={2}>ឈ្មោះ</th>
-                    {courses.map(course => (
-                        <th>
-                            {course.khmerName}
-                        </th>
-                    ))}
-                    <th rowSpan={2}>ពិន្ទុសរុប</th>
-                    <th rowSpan={2}>GPA</th>
-                    <th rowSpan={2}>Grade</th>
-                </tr>
-                <tr>
-                    {courses.map(c => (<th>
-                        {c.theoryCredit + c.practiceCredit} ({c.theoryCredit},{c.practiceCredit})
-                    </th>))}
-                </tr>
-            </thead>
-            <tbody>
-                {students.map(student => {
-                    let studentHasMakeup = false;
-                    const total = courses.reduce((acc, course) => {
-                        const { total: val, hasMakeup } = getScoreInfo(student.scores, course.id);
-                        if (hasMakeup) studentHasMakeup = true;
-                        if (isNaN(val)) return acc;
-                        return acc + val;
-                    }, 0);
-                    const averageGPA = courses.reduce((acc, course) => {
-                        const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
-                        if (hasMakeup) studentHasMakeup = true;
-                        if (isNaN(value)) return acc;
-                        return acc + value;
-                    }, 0) / courses.length;
-                    return (
-                        <tr key={student.id}>
-                            <td>{student.id}</td>
-                            <td>{student.khmerName}</td>
-                            {courses.map(course => {
-                                const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
-                                return <td key={course.id}>{value}{hasMakeup ? '*' : ''}</td>;
-                            })}
-                            <td>{total}{studentHasMakeup ? '*' : ''}</td>
-                            <td>{averageGPA.toFixed(2)}{studentHasMakeup ? '*' : ''}</td>
-                            <td>{gradeMap(averageGPA)}{studentHasMakeup ? '*' : ''}</td>
-                        </tr>
-                    );
-                })}
-            </tbody>
-        </table>
-        <table className="invisible-table">
             <tr>
-                <td>
-                    សំគាល់៖ ពិន្ទុដែលទទួលបាន 0.00 ឬ Unsatisfied ជាពិន្ទុប្រឡងធ្លាក់ដែលត្រូវប្រឡងសង។
-                    <br /><br />
-                    បានឃើញ និងឯកភាព
-                    <br />
-                    ប្រធានគណៈកម្មការប្រឡង
-                </td>
-                <td>
-                    ថ្ងៃ ខែ ឆ្នាំម្សាញ់ សប្តស័ក ព.ស ២៥៦៩
-                    <br />
-                    រាជធានីភ្នំពេញ, ថ្ងៃទី ខែ ឆ្នាំ ២០២៦
-                    <br />
-                    ព្រឺទ្ធបុរស
-                </td>
+                {courses.map(c => (<th>
+                    {c.theoryCredit + c.practiceCredit} ({c.theoryCredit},{c.practiceCredit})
+                </th>))}
             </tr>
-        </table>
-    </div>
-));
+        </thead>
+        <tbody>
+            {students.map(student => {
+                let studentHasMakeup = false;
+                const total = courses.reduce((acc, course) => {
+                    const { total: val, hasMakeup } = getScoreInfo(student.scores, course.id);
+                    if (hasMakeup) studentHasMakeup = true;
+                    if (isNaN(val)) return acc;
+                    return acc + val;
+                }, 0);
+                const averageGPA = courses.reduce((acc, course) => {
+                    const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
+                    if (hasMakeup) studentHasMakeup = true;
+                    if (isNaN(value)) return acc;
+                    return acc + value;
+                }, 0) / courses.length;
+                return (
+                    <tr key={student.id}>
+                        <td>{student.id}</td>
+                        <td>{student.khmerName}</td>
+                        {courses.map(course => {
+                            const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
+                            return <td key={course.id}>{value}{hasMakeup ? '*' : ''}</td>;
+                        })}
+                        <td>{total}{studentHasMakeup ? '*' : ''}</td>
+                        <td>{averageGPA.toFixed(2)}{studentHasMakeup ? '*' : ''}</td>
+                        <td>{gradeMap(averageGPA)}{studentHasMakeup ? '*' : ''}</td>
+                    </tr>
+                );
+            })}
+        </tbody>
+    </table>
+    <table className="invisible-table">
+        <tr>
+            <td>
+                សំគាល់៖ ពិន្ទុដែលទទួលបាន 0.00 ឬ Unsatisfied ជាពិន្ទុប្រឡងធ្លាក់ដែលត្រូវប្រឡងសង។
+                <br /><br />
+                បានឃើញ និងឯកភាព
+                <br />
+                ប្រធានគណៈកម្មការប្រឡង
+            </td>
+            <td>
+                ថ្ងៃ ខែ ឆ្នាំម្សាញ់ សប្តស័ក ព.ស ២៥៦៩
+                <br />
+                រាជធានីភ្នំពេញ, ថ្ងៃទី ខែ ឆ្នាំ ២០២៦
+                <br />
+                ព្រឺទ្ធបុរស
+            </td>
+        </tr>
+    </table>
+</div>));
 
 const App = () => {
     const docRef = useRef(null);

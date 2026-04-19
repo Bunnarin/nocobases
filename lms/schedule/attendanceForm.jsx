@@ -1,5 +1,7 @@
 const { Button } = ctx.libs.antd;
 const React = ctx.libs.React;
+const { useState } = React;
+
 const today = new Date().toISOString().split('T')[0];
 let { data: { data: attendances } } = await ctx.api.request({
     url: 'attendance:list',
@@ -25,7 +27,7 @@ const students = schedule.class.students;
 const App = () => {
     // Initialize state
     // Key: studentId, Value: { status: 'A'|'P'|'L', isLocked: boolean, id?: number }
-    const [attendanceStates, setAttendanceStates] = React.useState(() => {
+    const [attendanceStates, setAttendanceStates] = useState(() => {
         const map = {};
         students.forEach(s => {
             const att = attendances.find(a => a.studentId === s.id);

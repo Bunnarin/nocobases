@@ -1,20 +1,30 @@
 const { React } = ctx.libs;
 const { Button, Switch } = ctx.libs.antd;
-const { useRef, useState, useEffect, forwardRef } = React;
+const { useRef, useState, forwardRef } = React;
+
+const resObj = (res) => Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
 
 // because LC needs to know what the latest semester is
 const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
-        sort: '-startDate',
-        limit: 3
+        filter: {
+            $or: [
+                { startDate: { $dateOn: { type: "lastYear" } } },
+                { startDate: { $dateOn: { type: "thisYear" } } },
+                { startDate: { $dateOn: { type: "nextYear" } } }
+            ]
+        }
     }
 });
 
-// find the semester whose endDate is closest to now
+// find the semester whose middle is closest to now
 const semester = semesters.reduce((prev, curr) => {
-    const prevDiff = Math.abs(new Date(prev.endDate).getTime() - now.getTime());
-    const currDiff = Math.abs(new Date(curr.endDate).getTime() - now.getTime());
+    const time = (dateStr) => new Date(dateStr).getTime();
+    const prevMiddle = time(prev.startDate) + (time(prev.endDate) - time(prev.startDate)) / 2;
+    const currMiddle = time(curr.startDate) + (time(curr.endDate) - time(curr.startDate)) / 2;
+    const prevDiff = Math.abs(prevMiddle - new Date().getTime());
+    const currDiff = Math.abs(currMiddle - new Date().getTime());
     return currDiff < prevDiff ? curr : prev;
 });
 
@@ -34,7 +44,7 @@ if (isEnglish)
         params: {
             filterByTk: 'englishCourseSpec'
         }
-    }).then(res => englishCourseSpec = JSON.parse(res.data.data.value));
+    }).then(res => englishCourseSpec = JSON.parse(resObj(res).value));
 
 const students = schedule.class.students.sort((a, b) => a.khmerName?.localeCompare(b.khmerName, 'km'));
 const { weights, program } = schedule.course;
@@ -98,110 +108,35 @@ const getTotal = (studentId, scoreMap) => {
     return { total, hasMakeup };
 };
 
-const SuffixInput = ({ max, value, makeup, weightId, studentId, rowIndex, colIndex, onCommit, onPaste, isMakeup }) => {
-    const [isFocused, setIsFocused] = useState(false);
-    const [localValue, setLocalValue] = useState(value ?? '');
-    const timeoutRef = useRef(null);
-
-    // Keep in sync if parent scoreMap changes (e.g. initial load)
-    useEffect(() => setLocalValue(value ?? ''), [value]);
-
-    const student = students.find(({ id }) => id == studentId);
-    const originalScore = student.scores?.find(s => s.weightId == weightId);
-
-    const handleChange = async (e) => {
-        const raw = e.target.value;
-        if (raw !== '' && !/^\d*\.?\d*$/.test(raw)) return; // Restrict input strictly to decimals
-
-        const num = (raw === '' || raw === '.') ? 0 : parseFloat(raw);
-        if (num < 0 || num > max)
-            return ctx.message.error(`Score must be between 0 and ${max}`);
-
-        setLocalValue(raw);
-
-        onCommit(num, isMakeup);
-
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        timeoutRef.current = setTimeout(() => {
-            if (originalScore)
-                ctx.api.request({
-                    url: 'score:update',
-                    method: 'POST',
-                    params: { filterByTk: originalScore.id },
-                    data: { value: num, makeup: isMakeup }
-                }).then(res => {
-                    const idx = student.scores.findIndex(s => s.weightId == weightId);
-                    student.scores[idx] = res.data.data;
-                });
-            else
-                ctx.api.request({
-                    url: 'score:create',
-                    method: 'POST',
-                    data: {
-                        student: studentId,
-                        weight: weightId,
-                        course: schedule.course.id,
-                        value: num,
-                        makeup: isMakeup
-                    }
-                }).then(res => student.scores.push(res.data.data));
-        }, 1000);
-    };
-
-    const handleKeyDown = (e) => {
-        let r = rowIndex, c = colIndex;
-        if (e.key === 'Enter' || e.key === 'ArrowDown') r++;
-        else if (e.key === 'ArrowUp') r--;
-        else if (e.key === 'ArrowRight') c++;
-        else if (e.key === 'ArrowLeft') c--;
-        else return;
-        const next = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
-        if (next) { e.preventDefault(); next.focus(); next.select(); }
-    };
-
-    return (
-        <div style={{ position: 'relative', display: 'inline-block' }}>
-            <input
-                // this ensure that scrolling don't modify the value accidentally
-                type="text"
-                data-row={rowIndex}
-                data-col={colIndex}
-                value={localValue}
-                onChange={handleChange}
-                onKeyDown={handleKeyDown}
-                onPaste={onPaste}
-                onFocus={(e) => { setIsFocused(true); e.target.select(); }}
-                onBlur={() => setIsFocused(false)}
-                style={{ border: 'none', width: isFocused ? '65px' : '45px' }}
-            />
-            {makeup && '*'}
-            {isFocused && (
-                <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)' }}>
-                    /{max}
-                </span>
-            )}
-        </div>
-    );
-};
-
 // ── Visible interactive table & Document Template ──────────────────────────────
 
 const getBand = (score) => {
-    if (score >= 8 && score <= 12) return 'A1';
+    if (score >= 1 && score <= 12) return 'A1';
     if (score >= 13 && score <= 16) return 'A2';
     if (score >= 17 && score <= 23) return 'B1';
     if (score >= 24 && score <= 26) return 'B2';
     if (score >= 27 && score <= 28) return 'C1';
     if (score >= 29 && score <= 30) return 'C2';
-    return 'F';
+    return '';
 }
 
-const ScoreTable = forwardRef(({ scoreMap, onCommit, onPaste, isMakeup }, ref) => (
+const ScoreTable = forwardRef(({ scoreMap, onCommit, onPaste }, ref) => (
     <div ref={ref}>
         <style>{`
-            table, p { font-family: 'Khmer OS Battambang', sans-serif; font-size: 10px; border-collapse: collapse; width: 100%; }
-            th, td { border: 1pt solid #000; padding: 6px; text-align: center; }
-            .invisible-table td { border: none; }
+            table, p { 
+                font-family: 'Khmer OS Battambang', sans-serif; 
+                border-collapse: collapse; 
+                width: 100%; 
+            }
+            th, td { 
+                border: 1pt solid #000; 
+                padding: 6px; 
+                text-align: center; 
+            }
+            .invisible-table td { 
+                border: none; 
+                text-align: center; 
+            }
         `}</style>
 
         <table className="invisible-table">
@@ -221,15 +156,15 @@ const ScoreTable = forwardRef(({ scoreMap, onCommit, onPaste, isMakeup }, ref) =
         <table>
             <thead>
                 <tr>
-                    <th rowSpan={isEnglish ? 1 : 3}>ល.រ.</th>
-                    <th rowSpan={isEnglish ? 1 : 3}>ID</th>
-                    <th rowSpan={isEnglish ? 1 : 3}>ឈ្មោះ</th>
-                    <th rowSpan={isEnglish ? 1 : 3}>name</th>
-                    <th rowSpan={isEnglish ? 1 : 3}>ភេទ</th>
-                    <th rowSpan={isEnglish ? 1 : 3}>ថ្ងៃខែឆ្នាំកំណើត</th>
+                    <th rowSpan={isEnglish ? 1 : 4}>ល.រ.</th>
+                    <th rowSpan={isEnglish ? 1 : 4}>ID</th>
+                    <th rowSpan={isEnglish ? 1 : 4}>ឈ្មោះ</th>
+                    <th rowSpan={isEnglish ? 1 : 4}>name</th>
+                    <th rowSpan={isEnglish ? 1 : 4}>ភេទ</th>
+                    <th rowSpan={isEnglish ? 1 : 4}>ថ្ងៃខែឆ្នាំកំណើត</th>
                     {isEnglish ? (
                         allClos.map(c => (<React.Fragment key={c.weightId}>
-                            <th title={c.assessmentName}>{c.assessmentName}</th>
+                            <th>{c.assessmentName} ({englishCourseSpec.weights.find(w => w.id === c.weightId)?.weight}%)</th>
                             <th key={c.weightId + '-band'}>band</th>
                         </React.Fragment>))
                     ) : (
@@ -242,9 +177,10 @@ const ScoreTable = forwardRef(({ scoreMap, onCommit, onPaste, isMakeup }, ref) =
                             );
                         })
                     )}
-                    <th rowSpan={isEnglish ? 1 : 3}>{isEnglish ? 'ពិន្ទុសមមូល' : 'សរុប'}</th>
-                    {isEnglish && <th rowSpan={isEnglish ? 1 : 3}>band</th>}
-                    <th rowSpan={isEnglish ? 1 : 3}>លទ្ធផល</th>
+                    <th rowSpan={isEnglish ? 1 : 4}>{isEnglish ? 'ពិន្ទុសមមូល' : 'សរុប'}</th>
+                    {isEnglish && <th>band</th>}
+                    <th rowSpan={isEnglish ? 1 : 4}>លទ្ធផល {isEnglish && semester.number == 1 ? 'ឆមាសទី១' : ''}</th>
+                    {isEnglish && semester.number == 1 && <th rowSpan={isEnglish ? 1 : 4}>លទ្ធផល ឆមាសទី២</th>}
                 </tr>
                 {!isEnglish && (<>
                     <tr>
@@ -267,6 +203,17 @@ const ScoreTable = forwardRef(({ scoreMap, onCommit, onPaste, isMakeup }, ref) =
                             )
                         )}
                     </tr>
+                    <tr>
+                        {clos.map(({ PLOs }) =>
+                            PLOs.map(plo =>
+                                plo.assessments.map(c => (
+                                    <th key={c.weightId + '-max'}>
+                                        {c.weight}
+                                    </th>
+                                ))
+                            )
+                        )}
+                    </tr>
                 </>)}
             </thead>
             <tbody>
@@ -274,16 +221,25 @@ const ScoreTable = forwardRef(({ scoreMap, onCommit, onPaste, isMakeup }, ref) =
                     let { total, hasMakeup } = getTotal(student.id, scoreMap);
                     let pass = total / totalMaxScore >= 0.5;
 
+                    let passSem2;
                     if (isEnglish) {
                         total = 0;
                         englishCourseSpec.weights.forEach(({ id, weight }) => {
                             const entry = scoreMap[scoreKey(student.id, id)];
-                            total += entry?.value * weight / 100;
+                            if (!entry) return;
+                            total += entry.value * weight / 100;
                         });
                         total = Math.round(total);
                         const passThreshold = englishCourseSpec.semesterPassThresholds[semester.number - 1];
                         pass = total >= passThreshold;
+
+                        if (semester.number == 1) {
+                            const secondPassThreshold = englishCourseSpec.semesterPassThresholds[semester.number];
+                            passSem2 = total >= secondPassThreshold;
+                        }
                     }
+
+                    const passColor = (pass) => pass ? '#e6ffe6' : '#f8d0d0ff';
 
                     return (
                         <tr key={student.id}>
@@ -295,33 +251,49 @@ const ScoreTable = forwardRef(({ scoreMap, onCommit, onPaste, isMakeup }, ref) =
                             <td>{student.birthday}</td>
                             {allClos.map((clo, colIndex) => {
                                 const entry = scoreMap[scoreKey(student.id, clo.weightId)];
+
                                 return (<React.Fragment key={scoreKey(student.id, clo.weightId)}>
-                                    <td style={{ minWidth: '55px', position: 'relative' }}>
+                                    <td style={{ backgroundColor: passColor(isEnglish ? entry?.value > 0 : entry?.value >= clo.weight * 0.5) }}>
                                         <span className="export-text" style={{ display: 'none' }}>
                                             {entry?.value}
                                             {entry?.makeup ? '*' : ''}
                                         </span>
                                         <span className="no-export">
-                                            <SuffixInput
-                                                max={clo.weight}
-                                                value={entry?.value}
-                                                makeup={entry?.makeup}
-                                                studentId={student.id}
-                                                weightId={clo.weightId}
-                                                rowIndex={rowIndex}
-                                                colIndex={colIndex}
-                                                onCommit={(val, mk) => onCommit(student.id, clo.weightId, val, mk)}
+                                            <input
+                                                type="text"
+                                                data-row={rowIndex}
+                                                data-col={colIndex}
+                                                value={entry?.raw ?? entry?.value ?? ''}
+                                                onChange={(e) => onCommit(student.id, clo.weightId, e.target.value, clo.weight)}
+                                                onKeyDown={(e) => {
+                                                    let r = rowIndex, c = colIndex;
+                                                    if (e.key === 'Enter' || e.key === 'ArrowDown') r++;
+                                                    else if (e.key === 'ArrowUp') r--;
+                                                    else if (e.key === 'ArrowRight') c++;
+                                                    else if (e.key === 'ArrowLeft') c--;
+                                                    else return;
+                                                    const next = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+                                                    if (next) { e.preventDefault(); next.focus(); next.select(); }
+                                                }}
                                                 onPaste={(e) => onPaste(e, rowIndex, colIndex)}
-                                                isMakeup={isMakeup}
+                                                onFocus={(e) => e.target.select()}
+                                                onBlur={(e) => {
+                                                    const val = e.target.value;
+                                                    const formatted = (val === '' || val === '.') ? '' : String(parseFloat(val));
+                                                    onCommit(student.id, clo.weightId, formatted, clo.weight, true);
+                                                }}
+                                                style={{ backgroundColor: 'transparent', border: 'none', width: '45px', textAlign: 'center', outline: 'none', color: 'inherit' }}
                                             />
+                                            {entry?.makeup ? '*' : ''}
                                         </span>
                                     </td>
-                                    {isEnglish && <td>{getBand(entry?.value)}</td>}
+                                    {isEnglish && <td>{getBand(Math.round(entry?.value))}</td>}
                                 </React.Fragment>);
                             })}
                             <td>{total}{hasMakeup ? '*' : ''}</td>
-                            {isEnglish && <td>{getBand(total)}</td>}
-                            <td>{pass ? 'sastified' : 'unsastified'}{hasMakeup ? '*' : ''}</td>
+                            {isEnglish && <td>{getBand(Math.round(total))}</td>}
+                            <td style={{ backgroundColor: passColor(pass) }}>{pass ? 'sastified' : 'unsastified'}{hasMakeup ? '*' : ''}</td>
+                            {isEnglish && semester.number == 1 && <td style={{ backgroundColor: passColor(passSem2) }}>{passSem2 ? 'ជាប់ស្វ័យប្រវត្តិ' : 'តម្រូវឲ្យប្រឡង'}</td>}
                         </tr>
                     )
                 })}
@@ -354,16 +326,60 @@ const App = () => {
     const [isMakeup, setIsMakeup] = useState(Object.values(scoreMap).some(s => !!s.makeup));
 
     const docRef = useRef(null);
+    const timeoutsMap = useRef({});
 
-    const handleCommit = (studentId, weightId, value, makeup) => {
+    const handleCommit = (studentId, weightId, rawValue, max, instant = false) => {
+        if (rawValue !== '' && !/^\d*\.?\d*$/.test(rawValue)) return;
+
+        const num = (rawValue === '' || rawValue === '.') ? 0 : parseFloat(rawValue);
+        if (num < 0 || num > max)
+            return ctx.message.error(`must be between 0 and ${max}`);
+
         const key = scoreKey(studentId, weightId);
-        setScoreMap(prev => {
-            const next = {
-                ...prev,
-                [key]: { ...prev[key], value, makeup }
-            };
-            return next;
-        });
+
+        setScoreMap(prev => ({
+            ...prev,
+            [key]: { ...prev[key], raw: rawValue, value: num, makeup: isMakeup }
+        }));
+
+        const execute = () => {
+            timeoutsMap.current[key] = null;
+            const student = students.find(({ id }) => id == studentId);
+            const originalScore = student.scores?.find(s => s.weightId == weightId);
+
+            if (originalScore)
+                ctx.api.request({
+                    url: 'score:update',
+                    method: 'POST',
+                    params: { filterByTk: originalScore.id },
+                    data: { value: num, makeup: isMakeup }
+                }).then(res => {
+                    const idx = student.scores.findIndex(s => s.weightId == weightId);
+                    student.scores[idx] = resObj(res);
+                });
+            else
+                ctx.api.request({
+                    url: 'score:create',
+                    method: 'POST',
+                    data: {
+                        student: student.id,
+                        weight: weightId,
+                        course: schedule.course.id,
+                        value: num,
+                        makeup: isMakeup
+                    }
+                }).then(res => student.scores.push(resObj(res)));
+        };
+
+        if (instant) {
+            if (timeoutsMap.current[key]) {
+                clearTimeout(timeoutsMap.current[key]);
+                execute();
+            }
+        } else {
+            if (timeoutsMap.current[key]) clearTimeout(timeoutsMap.current[key]);
+            timeoutsMap.current[key] = setTimeout(execute, 1000);
+        }
     };
 
     const handlePaste = async (e, startRowIdx, startColIdx) => {
@@ -415,7 +431,7 @@ const App = () => {
                 const key = scoreKey(student.id, clo.weightId);
                 const originalScore = student.scores?.find(s => s.weightId == clo.weightId);
 
-                next[key] = { ...next[key], value: val, makeup: globalMakeup };
+                next[key] = { ...next[key], raw: String(val), value: val, makeup: globalMakeup };
 
                 if (originalScore)
                     ctx.api.request({
@@ -425,7 +441,7 @@ const App = () => {
                         data: { value: val, makeup: globalMakeup }
                     }).then(res => {
                         const idx = student.scores.findIndex(s => s.weightId == clo.weightId);
-                        student.scores[idx] = res.data.data;
+                        student.scores[idx] = resObj(res);
                     });
                 else
                     ctx.api.request({
@@ -438,7 +454,7 @@ const App = () => {
                             value: val,
                             makeup: globalMakeup
                         }
-                    }).then(res => student.scores.push(res.data.data));
+                    }).then(res => student.scores.push(resObj(res)));
             });
             ctx.message.success(`Pasted ${updates.length} scores successfully.`);
             return next;
@@ -452,9 +468,7 @@ const App = () => {
         clonedDoc.querySelectorAll('.no-export').forEach(el => el.remove());
 
         // Flip the underlying invisible text into view so MS Word detects them properly
-        clonedDoc.querySelectorAll('.export-text').forEach(el => {
-            el.style.display = 'inline';
-        });
+        clonedDoc.querySelectorAll('.export-text').forEach(el => el.style.display = 'inline');
 
         const fullHTML = `
             <html xmlns:o='urn:schemas-microsoft-com:office:office'
@@ -477,6 +491,7 @@ const App = () => {
     };
 
     return (<>
+        <h1>{schedule.course.khmerName}</h1>
         <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '20px' }}>
             <span>
                 ប្រឡងសង?
@@ -485,8 +500,9 @@ const App = () => {
             <Button type="primary" onClick={() => download(false)}>download word</Button>
             <Button onClick={() => download(true)}>download excel</Button>
         </div>
+        <p>* = ធ្លាប់ធ្លាក់</p>
         <p>you can also paste from excel as long as the name ordering is the same</p>
-        <ScoreTable ref={docRef} scoreMap={scoreMap} onCommit={handleCommit} onPaste={handlePaste} isMakeup={isMakeup} />
+        <ScoreTable ref={docRef} scoreMap={scoreMap} onCommit={handleCommit} onPaste={handlePaste} />
     </>);
 };
 

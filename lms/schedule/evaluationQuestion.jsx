@@ -21,13 +21,26 @@ let { data: { data: questions } } = await ctx.api.request({
   url: 'evaluationQuestion:list',
 });
 
-// get the date of the semester so we can decide whther to show the CLO questions or not
-const { data: { data: [semester] } } = await ctx.api.request({
+const { data: { data: semesters } } = await ctx.api.request({
   url: 'semester:list',
   params: {
-    pageSize: 1,
-    sort: '-startDate'
+    filter: {
+      $or:
+        [{ startDate: { $dateOn: { type: "lastYear" } } },
+        { startDate: { $dateOn: { type: "thisYear" } } },
+        { startDate: { $dateOn: { type: "nextYear" } } }]
+    }
   }
+});
+
+// find the semester whose middle is closest to now
+const semester = semesters.reduce((prev, curr) => {
+  const time = (dateStr) => new Date(dateStr).getTime();
+  const prevMiddle = time(prev.startDate) + (time(prev.endDate) - time(prev.startDate)) / 2;
+  const currMiddle = time(curr.startDate) + (time(curr.endDate) - time(curr.startDate)) / 2;
+  const prevDiff = Math.abs(prevMiddle - new Date().getTime());
+  const currDiff = Math.abs(currMiddle - new Date().getTime());
+  return currDiff < prevDiff ? curr : prev;
 });
 
 // if today is closer to the end than the mid of the semester, then we append the CLo qs

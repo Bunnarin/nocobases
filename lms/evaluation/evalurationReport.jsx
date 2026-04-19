@@ -94,63 +94,59 @@ const AnswerCell = ({ type, answers, showAiSummary }) => {
 };
 
 // 2. The Document Template
-const DocTemplate = forwardRef(({ showAiSummary, showCLO, colWidth }, ref) => (
-  <div ref={ref}>
-    {results.map((result, idx) => {
-      // WIP: check if we need to add CLO question
-      return (
-        <div key={idx} style={{
-          display: 'block',
-          fontFamily: 'Khmer OS Battambang, sans-serif',
-        }}>
-          {/* Metadata Section */}
-          <div style={{ marginBottom: '20px' }}>
-            មុខវិជ្ជា៖ <strong>{result.course?.englishName}</strong>&nbsp;
-            គ្រូបង្រៀន៖ <strong>{result.lecturer?.englishName}</strong>&nbsp;
-            ថ្នាក់៖ <strong>{result.class?.name}</strong><br />
-            ចំនួនសិស្សឆ្លើយសរុប៖ <strong>{result.completedStudents?.length}</strong>
-          </div>
-
-          {/* Table */}
-          <table>
-            <thead>
-              <tr>
-                <th>សំណួរ</th>
-                <th>ចម្លើយ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {questions.map((qs, i) => (
-                <tr key={i}>
-                  <td>{qs.label}</td>
-                  <td>
-                    <AnswerCell
-                      type={qs.type}
-                      answers={result?.[`question${i}`]}
-                      showAiSummary={showAiSummary}
-                    />
-                  </td>
-                </tr>
-              ))}
-              {showCLO && CLOs.filter(CLO => CLO.courseId == result.courseId).map((CLO, i) => (
-                <tr key={i + questions.length}>
-                  <td>CLO {CLO.number} achieved</td>
-                  <td>
-                    <AnswerCell
-                      type='mcq'
-                      answers={result?.[`question${i + questions.length}`]}
-                      showAiSummary={showAiSummary}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+const DocTemplate = forwardRef(({ showAiSummary, showCLO, colWidth }, ref) => (<div ref={ref}>
+  {results.map((result, idx) => {
+    // WIP: check if we need to add CLO question
+    return (
+      <div key={idx} style={{
+        display: 'block',
+        fontFamily: 'Khmer OS Battambang, sans-serif',
+      }}>
+        {/* Metadata Section */}
+        <div style={{ marginBottom: '20px' }}>
+          មុខវិជ្ជា៖ <strong>{result.course?.englishName}</strong>&nbsp;
+          គ្រូបង្រៀន៖ <strong>{result.lecturer?.englishName}</strong>&nbsp;
+          ថ្នាក់៖ <strong>{result.class?.name}</strong><br />
+          ចំនួនសិស្សឆ្លើយសរុប៖ <strong>{result.completedStudents?.length}</strong>
         </div>
-      );
-    })}
-  </div>
-));
+
+        {/* Table */}
+        <table>
+          <thead>
+            <tr>
+              <th>សំណួរ</th>
+              <th>ចម្លើយ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {questions.map((qs, i) => (<tr key={i}>
+              <td>{qs.label}</td>
+              <td>
+                <AnswerCell
+                  type={qs.type}
+                  answers={result?.[`question${i}`]}
+                  showAiSummary={showAiSummary}
+                />
+              </td>
+            </tr>))}
+            {showCLO && CLOs.filter(CLO => CLO.courseId == result.courseId).map((CLO, i) => (
+              <tr key={i + questions.length}>
+                <td>CLO {CLO.number} achieved</td>
+                <td>
+                  <AnswerCell
+                    type='mcq'
+                    answers={result?.[`question${i + questions.length}`]}
+                    showAiSummary={showAiSummary}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  })}
+</div>));
 
 // 3. Main App
 const App = () => {

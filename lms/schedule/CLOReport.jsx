@@ -1,20 +1,26 @@
 const { React } = ctx.libs;
 const { Button } = ctx.libs.antd;
-const { useRef } = React;
+const { useRef, forwardRef } = React;
 
-// 1. Data Fetching
 const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
-        sort: '-startDate',
-        limit: 3
+        filter: {
+            $or:
+                [{ startDate: { $dateOn: { type: "lastYear" } } },
+                { startDate: { $dateOn: { type: "thisYear" } } },
+                { startDate: { $dateOn: { type: "nextYear" } } }]
+        }
     }
 });
 
-// find the semester whose endDate is closest to now
+// find the semester whose middle is closest to now
 const semester = semesters.reduce((prev, curr) => {
-    const prevDiff = Math.abs(new Date(prev.endDate).getTime() - now.getTime());
-    const currDiff = Math.abs(new Date(curr.endDate).getTime() - now.getTime());
+    const time = (dateStr) => new Date(dateStr).getTime();
+    const prevMiddle = time(prev.startDate) + (time(prev.endDate) - time(prev.startDate)) / 2;
+    const currMiddle = time(curr.startDate) + (time(curr.endDate) - time(curr.startDate)) / 2;
+    const prevDiff = Math.abs(prevMiddle - new Date().getTime());
+    const currDiff = Math.abs(currMiddle - new Date().getTime());
     return currDiff < prevDiff ? curr : prev;
 });
 
@@ -88,21 +94,6 @@ const SummaryTable = () => {
     const summaryFailPct = summaryStudents.length ? ((summaryFailCount / summaryStudents.length) * 100).toFixed(0) : 0;
 
     return (<>
-        <style>{`
-            table, p {
-                font-family: 'Khmer OS Battambang', sans-serif;
-                font-size: 10px;
-                border-collapse: collapse;
-                width: 100%;
-            }
-            td, th {
-                text-align: center;
-                border: 1pt solid #ccc;
-            }
-            .invisible-table td {
-                border: none;
-            }
-        `}</style>
         <table className="invisible-table">
             <tr>
                 <td>
@@ -129,11 +120,9 @@ const SummaryTable = () => {
                         <th>ល.រ.</th>
                         <th>ID</th>
                         <th>Name</th>
-                        {summaryCLOs.map(clo => (
-                            <th key={clo.id}>
-                                CLO {clo.number}<br />({clo.totalWeight})
-                            </th>
-                        ))}
+                        {summaryCLOs.map(clo => (<th key={clo.id}>
+                            CLO {clo.number}<br />({clo.totalWeight})
+                        </th>))}
                         <th>Total Marks<br />(100)</th>
                         <th>Grade</th>
                     </tr>
@@ -144,9 +133,9 @@ const SummaryTable = () => {
                             <td>{idx + 1}</td>
                             <td>{item.student.id}</td>
                             <td>{item.student.khmerName}</td>
-                            {item.cloScores.map((score, i) => (
-                                <td key={i}>{score.value}{score.hasMakeup ? '*' : ''}</td>
-                            ))}
+                            {item.cloScores.map((score, i) => (<td key={i}>
+                                {score.value}{score.hasMakeup ? '*' : ''}
+                            </td>))}
                             <td>
                                 {item.grandTotal}{item.hasMakeup ? '*' : ''}
                             </td>
@@ -312,8 +301,23 @@ const CLOTable = ({ clo }) => {
 };
 
 // 5. App / DocTemplate
-const DocTemplate = React.forwardRef((props, ref) => (
+const DocTemplate = forwardRef((props, ref) => (
     <div ref={ref}>
+        <style>{`
+            table, p {
+                font-family: 'Khmer OS Battambang', sans-serif;
+                border-collapse: collapse;
+                width: 100%;
+            }
+            td, th {
+                text-align: center;
+                border: 1pt solid #ccc;
+            }
+            .invisible-table td {
+                border: none;
+                text-align: center;
+            }
+        `}</style>
         <SummaryTable />
         {CLOs.map(clo => (<CLOTable key={clo.id} clo={clo} />))}
     </div>

@@ -1,20 +1,26 @@
 const { React } = ctx.libs;
-const { useRef } = React;
+const { useRef, forwardRef } = React;
 const { Button } = ctx.libs.antd;
 
-// 1. Data Fetching
 const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
-        sort: '-startDate',
-        limit: 3
+        filter: {
+            $or:
+                [{ startDate: { $dateOn: { type: "lastYear" } } },
+                { startDate: { $dateOn: { type: "thisYear" } } },
+                { startDate: { $dateOn: { type: "nextYear" } } }]
+        }
     }
 });
 
-// find the semester whose endDate is closest to now
+// find the semester whose middle is closest to now
 const semester = semesters.reduce((prev, curr) => {
-    const prevDiff = Math.abs(new Date(prev.endDate).getTime() - now.getTime());
-    const currDiff = Math.abs(new Date(curr.endDate).getTime() - now.getTime());
+    const time = (dateStr) => new Date(dateStr).getTime();
+    const prevMiddle = time(prev.startDate) + (time(prev.endDate) - time(prev.startDate)) / 2;
+    const currMiddle = time(curr.startDate) + (time(curr.endDate) - time(curr.startDate)) / 2;
+    const prevDiff = Math.abs(prevMiddle - new Date().getTime());
+    const currDiff = Math.abs(currMiddle - new Date().getTime());
     return currDiff < prevDiff ? curr : prev;
 });
 
@@ -181,12 +187,11 @@ const PLOTable = ({ plo }) => {
 };
 
 // 5. DocTemplate Component
-const DocTemplate = React.forwardRef((props, ref) => (
+const DocTemplate = forwardRef((props, ref) => (
     <div ref={ref}>
         <style>{`
             table, p {
                 font-family: 'Khmer OS Battambang', sans-serif;
-                font-size: 10px;
                 border-collapse: collapse;
                 width: 100%;
             }
@@ -196,6 +201,7 @@ const DocTemplate = React.forwardRef((props, ref) => (
             }
             .invisible-table td {
                 border: none;
+                text-align: center;
             }
         `}</style>
         <table className="invisible-table">

@@ -1,9 +1,25 @@
-const { data: { data: [semester] } } = await ctx.api.request({
+const resObj = (res) => Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
+
+const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
-        pageSize: 1,
-        sort: '-startDate'
-    },
+        filter: {
+            $or:
+                [{ startDate: { $dateOn: { type: "lastYear" } } },
+                { startDate: { $dateOn: { type: "thisYear" } } },
+                { startDate: { $dateOn: { type: "nextYear" } } }]
+        }
+    }
+});
+
+// find the semester whose middle is closest to now
+const semester = semesters.reduce((prev, curr) => {
+    const time = (dateStr) => new Date(dateStr).getTime();
+    const prevMiddle = time(prev.startDate) + (time(prev.endDate) - time(prev.startDate)) / 2;
+    const currMiddle = time(curr.startDate) + (time(curr.endDate) - time(curr.startDate)) / 2;
+    const prevDiff = Math.abs(prevMiddle - new Date().getTime());
+    const currDiff = Math.abs(currMiddle - new Date().getTime());
+    return currDiff < prevDiff ? curr : prev;
 });
 
 const { data: { data: portfolios } } = await ctx.api.request({
@@ -46,7 +62,7 @@ const App = () => {
                 method: 'POST',
                 data: { file },
                 headers: { 'Content-Type': 'multipart/form-data' }
-            }).then(({ data }) => newFileIds.push({ id: data.data.id }));
+            }).then(res => newFileIds.push({ id: resObj(res).id }));
         // Step 2: Update or Create the Portfolio record
         const existing = portfolios.find(p => p.criteriaId === criteriaId);
         if (existing)
@@ -70,7 +86,7 @@ const App = () => {
                     semester: semester.id,
                     files: newFileIds
                 }
-            }).then(res => portfolios.push(res.data.data));
+            }).then(res => portfolios.push(resObj(res)));
         window.location.reload();
     };
 

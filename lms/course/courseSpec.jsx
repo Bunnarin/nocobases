@@ -1,3 +1,6 @@
+// bcuz the nocobase res isn't consistent
+const resObj = (res) => Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
+
 // get config, see if we're allowed to make change during this period
 // this KV table has a key val pair. it's is ISOstring that tells us the last date that we're allowed to make change
 let deadlinePassed = true;
@@ -6,9 +9,10 @@ await ctx.api.request({
     params: {
         filterByTk: 'courseSpecDeadline'
     },
-}).then(({ data }) => {
-    if (data?.data?.value)
-        deadlinePassed = new Date(data.data.value) <= new Date();
+}).then(res => {
+    const data = resObj(res);
+    if (data?.value)
+        deadlinePassed = new Date(data.value) <= new Date();
 });
 
 const { data: { data: { programId, CLOs, weights: oldWeights } } } = await ctx.api.request({
@@ -39,7 +43,7 @@ const { data: { data: assessments } } = await ctx.api.request({
 
 const { React } = ctx.libs;
 const { useState } = React;
-const { Select, Button } = ctx.libs.antd;
+const { Select, Button, Modal } = ctx.libs.antd;
 
 const weightToDetach = [];
 const cloToDetach = [];
@@ -59,22 +63,18 @@ const App = () => {
         if (totalWeight !== 100)
             return ctx.message.error('the total weight is not 100%');
 
-        if (e.target.textContent === 'submit') {
-            e.target.textContent = 'click again to submit';
-            return ctx.message.error('after this, you cannot make any further changes. click again to submit');
-        }
+        // make sure that all CLO haver khmerStatement
+        for (const clo of localCLOs)
+            if (!clo.khmerStatement)
+                return ctx.message.error('Please fill in the khmerStatement for all CLOs.');
 
         // detach weights
         for (const weightId of weightToDetach)
             await ctx.api.request({
                 url: 'weight:update',
                 method: 'POST',
-                params: {
-                    filterByTk: weightId
-                },
-                data: {
-                    courseId: null
-                }
+                params: { filterByTk: weightId },
+                data: { courseId: null }
             });
 
         // detach CLOs
@@ -82,12 +82,8 @@ const App = () => {
             await ctx.api.request({
                 url: 'CLO:update',
                 method: 'POST',
-                params: {
-                    filterByTk: cloId
-                },
-                data: {
-                    courseId: null
-                }
+                params: { filterByTk: cloId },
+                data: { courseId: null }
             });
 
         // Create/Update CLOs
@@ -104,7 +100,7 @@ const App = () => {
                         khmerStatement: clo.khmerStatement,
                         course: ctx.value
                     }
-                }).then(({ data }) => cloIdMap[clo.id] = data.data.id);
+                });
             else if (clo.edited)
                 ctx.api.request({
                     url: 'CLO:update',
@@ -142,6 +138,8 @@ const App = () => {
             setWeights([...currentWeights]);
         }
         ctx.message.success('done. you can close this popup now');
+        // sorry but I really tried to update the local state after submit but it just doesn't work
+        setTimeout(() => window.location.reload(), 1000);
     }
 
     const addCLO = () => {
@@ -157,24 +155,28 @@ const App = () => {
         ]);
     };
 
-    const removeCLO = (cloId) => {
-        setLocalCLOs(prev => prev.filter(c => c.id !== cloId));
-        if (typeof cloId == 'number')
-            cloToDetach.push(cloId);
+    const removeCLO = (cloId) =>
+        Modal.confirm({
+            title: 'Are you sure you want to remove this CLO?',
+            content: 'This will also remove all associated weights.',
+            onOk() {
+                setLocalCLOs(prev => prev.filter(c => c.id !== cloId));
+                if (typeof cloId == 'number')
+                    cloToDetach.push(cloId);
 
-        // Also detach any associated weights
-        weights.filter(w => w.CLOId === cloId && !w.new)
-            .forEach(w => weightToDetach.push(w.id));
-        setWeights(prev => prev.filter(w => w.CLOId !== cloId));
-    };
+                // Also detach any associated weights
+                weights.filter(w => w.CLOId === cloId && !w.new)
+                    .forEach(w => weightToDetach.push(w.id));
+                setWeights(prev => prev.filter(w => w.CLOId !== cloId));
+            }
+        });
 
-    const updateCLO = (cloId, key, value) => {
+    const updateCLO = (cloId, key, value) =>
         setLocalCLOs(prev => prev.map(c =>
             c.id !== cloId ? c : { ...c, [key]: value, edited: !c.new }
         ));
-    };
 
-    const addWeight = (CLOId) => {
+    const addWeight = (CLOId) =>
         setWeights(prev => [
             ...prev,
             {
@@ -187,7 +189,6 @@ const App = () => {
                 weight: 10
             }
         ]);
-    };
 
     const removeWeight = (weightId) => {
         setWeights(prev => prev.filter(w => w.id !== weightId));
@@ -240,31 +241,30 @@ const App = () => {
                     const cloWeights = weights.filter(w => w.CLOId === clo.id);
 
                     if (cloWeights.length === 0)
-                        return (
-                            <tr key={`empty-${clo.id}`}>
-                                <td>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        CLO {clo.number}
-                                        <Button onClick={() => addWeight(clo.id)}>➕</Button>
-                                    </div>
-                                </td>
-                                <td>
-                                    <textarea
-                                        placeholder="english statement..."
-                                        value={clo.statement}
-                                        onChange={(e) => updateCLO(clo.id, 'statement', e.target.value)}
-                                    />
-                                </td>
-                                <td>
-                                    <textarea
-                                        placeholder="khmer statement..."
-                                        value={clo.khmerStatement}
-                                        onChange={(e) => updateCLO(clo.id, 'khmerStatement', e.target.value)}
-                                    />
-                                </td>
-                                <td colSpan="4">No weights assigned</td>
-                            </tr>
-                        );
+                        return (<tr key={`empty-${clo.id}`}>
+                            <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    CLO {clo.number}
+                                    <Button onClick={() => addWeight(clo.id)} title="add weight">➕</Button>
+                                    <Button danger onClick={() => removeCLO(clo.id)} title="remove CLO">✕</Button>
+                                </div>
+                            </td>
+                            <td>
+                                <textarea
+                                    placeholder="english statement..."
+                                    value={clo.statement}
+                                    onChange={(e) => updateCLO(clo.id, 'statement', e.target.value)}
+                                />
+                            </td>
+                            <td>
+                                <textarea
+                                    placeholder="khmer statement..."
+                                    value={clo.khmerStatement}
+                                    onChange={(e) => updateCLO(clo.id, 'khmerStatement', e.target.value)}
+                                />
+                            </td>
+                            <td colSpan="4">No weights assigned</td>
+                        </tr>);
 
                     return cloWeights.map((w, index) => {
                         // Logic: Is this row fully "configured"?
@@ -290,99 +290,101 @@ const App = () => {
                             )
                             .map(other => parseInt(other.PLOId));
 
-                        return (
-                            <tr key={w.id}>
-                                {index === 0 && (<>
-                                    <td rowSpan={cloWeights.length}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                            CLO {clo.number}
-                                            <Button onClick={() => addWeight(clo.id)}>➕</Button>
-                                        </div>
-                                    </td>
-                                    <td rowSpan={cloWeights.length}>
-                                        <textarea
-                                            placeholder="Enter CLO statement..."
-                                            value={clo.statement}
-                                            onChange={(e) => updateCLO(clo.id, 'statement', e.target.value)}
-                                        />
-                                    </td>
-                                    <td rowSpan={cloWeights.length}>
-                                        <textarea
-                                            placeholder="khmer statement..."
-                                            value={clo.khmerStatement}
-                                            onChange={(e) => updateCLO(clo.id, 'khmerStatement', e.target.value)}
-                                        />
-                                    </td>
-                                </>)}
-                                <td>
-                                    <Select
-                                        showSearch
-                                        placeholder="Select PLO"
-                                        optionFilterProp="label"
-                                        value={w.PLOId || undefined}
-                                        disabled={isLocked}
-                                        onChange={(val) => updateWeight(w.id, 'PLOId', val)}
-                                        style={{ width: '100%' }}
-                                        options={PLOs
-                                            .filter(p => !usedPLOIds.includes(p.id))
-                                            .map(p => ({ label: `PLO ${p.number}`, value: p.id }))
+                        return (<tr key={w.id}>
+                            {index === 0 && (<>
+                                <td rowSpan={cloWeights.length}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        CLO {clo.number}
+                                        <Button onClick={() => addWeight(clo.id)} title="add weight">➕</Button>
+                                        <Button danger onClick={() => removeCLO(clo.id)} title="remove CLO">✕</Button>
+                                    </div>
+                                </td>
+                                <td rowSpan={cloWeights.length}>
+                                    <textarea
+                                        placeholder="Enter CLO statement..."
+                                        value={clo.statement}
+                                        onChange={(e) => updateCLO(clo.id, 'statement', e.target.value)}
+                                    />
+                                </td>
+                                <td rowSpan={cloWeights.length}>
+                                    <textarea
+                                        placeholder="khmer statement..."
+                                        value={clo.khmerStatement}
+                                        onChange={(e) => updateCLO(clo.id, 'khmerStatement', e.target.value)}
+                                    />
+                                </td>
+                            </>)}
+                            <td>
+                                <Select
+                                    showSearch
+                                    placeholder="Select PLO"
+                                    optionFilterProp="label"
+                                    value={w.PLOId || undefined}
+                                    disabled={isLocked}
+                                    title={'to edit, you must remove this weight and add a new one'}
+                                    onChange={(val) => updateWeight(w.id, 'PLOId', val)}
+                                    style={{ width: '100%' }}
+                                    options={PLOs
+                                        .filter(p => !usedPLOIds.includes(p.id))
+                                        .map(p => ({ label: `PLO ${p.number}`, value: p.id }))
+                                    }
+                                />
+                            </td>
+                            <td>
+                                <Select
+                                    showSearch
+                                    placeholder="Select Assessment"
+                                    onSearch={setAssessmentSearch}
+                                    onBlur={() => setAssessmentSearch('')}
+                                    filterOption={false}
+                                    value={w.assessmentId || undefined}
+                                    disabled={!w.PLOId || isLocked}
+                                    title={'to edit, you must remove this weight and add a new one'}
+                                    onChange={async (val) => {
+                                        // create if new
+                                        if (typeof val === 'string' && val.startsWith('__new__')) {
+                                            const name = val.split(':')[1];
+                                            const res = await ctx.api.request({
+                                                url: 'assessment:create',
+                                                method: 'POST',
+                                                data: { name }
+                                            });
+                                            const newA = resObj(res);
+                                            setLocalAssessments(prev => [...prev, newA]);
+                                            updateWeight(w.id, 'assessmentId', newA.id);
+                                        } else {
+                                            updateWeight(w.id, 'assessmentId', val);
                                         }
-                                    />
-                                </td>
-                                <td>
-                                    <Select
-                                        showSearch
-                                        placeholder="Select Assessment"
-                                        onSearch={setAssessmentSearch}
-                                        onBlur={() => setAssessmentSearch('')}
-                                        filterOption={false}
-                                        value={w.assessmentId || undefined}
-                                        disabled={!w.PLOId || isLocked}
-                                        onChange={async (val) => {
-                                            // create if new
-                                            if (typeof val === 'string' && val.startsWith('__new__')) {
-                                                const name = val.split(':')[1];
-                                                const resp = await ctx.api.request({
-                                                    url: 'assessment:create',
-                                                    method: 'POST',
-                                                    data: { name }
-                                                });
-                                                const newA = resp.data.data;
-                                                setLocalAssessments(prev => [...prev, newA]);
-                                                updateWeight(w.id, 'assessmentId', newA.id);
-                                            } else {
-                                                updateWeight(w.id, 'assessmentId', val);
-                                            }
-                                            setAssessmentSearch('');
-                                        }}
-                                        options={(() => {
-                                            const opts = localAssessments
-                                                .filter(a => !usedAssessmentIds.includes(a.id))
-                                                .filter(a => a.name.toLowerCase().includes(assessmentSearch.toLowerCase()))
-                                                .map(a => ({ label: a.name, value: a.id }));
-                                            if (assessmentSearch && !localAssessments.some(a => a.name.toLowerCase() === assessmentSearch.toLowerCase()))
-                                                opts.push({ label: `➕ Create "${assessmentSearch}"`, value: `__new__:${assessmentSearch}` });
-                                            return opts;
-                                        })()}
-                                    />
-                                </td>
-                                <td>
-                                    <input
-                                        required
-                                        disabled={!w.new}
-                                        type="number"
-                                        min="1"
-                                        max="100"
-                                        step="1"
-                                        value={w.weight}
-                                        onChange={(e) => updateWeight(w.id, 'weight', e.target.value)}
-                                    />
-                                </td>
-                                <td>
-                                    <Button danger onClick={() => removeWeight(w.id)}>✕</Button>
-                                </td>
-                            </tr>
-                        );
+                                        setAssessmentSearch('');
+                                    }}
+                                    options={(() => {
+                                        const opts = localAssessments
+                                            .filter(a => !usedAssessmentIds.includes(a.id))
+                                            .filter(a => a.name.toLowerCase().includes(assessmentSearch.toLowerCase()))
+                                            .map(a => ({ label: a.name, value: a.id }));
+                                        if (assessmentSearch && !localAssessments.some(a => a.name.toLowerCase() === assessmentSearch.toLowerCase()))
+                                            opts.push({ label: `➕ Create "${assessmentSearch}"`, value: `__new__:${assessmentSearch}` });
+                                        return opts;
+                                    })()}
+                                />
+                            </td>
+                            <td>
+                                <input
+                                    required
+                                    disabled={!w.new}
+                                    title={'to edit, you must remove this weight and add a new one'}
+                                    type="number"
+                                    min="1"
+                                    max="100"
+                                    step="1"
+                                    value={w.weight}
+                                    onChange={(e) => updateWeight(w.id, 'weight', e.target.value)}
+                                />
+                            </td>
+                            <td>
+                                <Button danger onClick={() => removeWeight(w.id)}>✕</Button>
+                            </td>
+                        </tr>);
                     });
                 })}
             </tbody>
