@@ -10,10 +10,11 @@ const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         filter: {
-            $or:
-                [{ startDate: { $dateOn: { type: "lastYear" } } },
+            $or: [
+                { startDate: { $dateOn: { type: "lastYear" } } },
                 { startDate: { $dateOn: { type: "thisYear" } } },
-                { startDate: { $dateOn: { type: "nextYear" } } }]
+                { startDate: { $dateOn: { type: "nextYear" } } }
+            ]
         }
     }
 });
@@ -182,7 +183,7 @@ const DocTemplate = forwardRef((props, ref) => (<div ref={ref}>
                             const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
                             return <td key={course.id}>{value}{hasMakeup ? '*' : ''}</td>;
                         })}
-                        <td>{total}{studentHasMakeup ? '*' : ''}</td>
+                        <td>{total.toFixed(2)}{studentHasMakeup ? '*' : ''}</td>
                         <td>{averageGPA.toFixed(2)}{studentHasMakeup ? '*' : ''}</td>
                         <td>{gradeMap(averageGPA)}{studentHasMakeup ? '*' : ''}</td>
                     </tr>

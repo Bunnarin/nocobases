@@ -4,10 +4,11 @@ const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         filter: {
-            $or:
-                [{ startDate: { $dateOn: { type: "lastYear" } } },
+            $or: [
+                { startDate: { $dateOn: { type: "lastYear" } } },
                 { startDate: { $dateOn: { type: "thisYear" } } },
-                { startDate: { $dateOn: { type: "nextYear" } } }]
+                { startDate: { $dateOn: { type: "nextYear" } } }
+            ]
         }
     }
 });

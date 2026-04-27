@@ -6,10 +6,11 @@ const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         filter: {
-            $or:
-                [{ startDate: { $dateOn: { type: "lastYear" } } },
+            $or: [
+                { startDate: { $dateOn: { type: "lastYear" } } },
                 { startDate: { $dateOn: { type: "thisYear" } } },
-                { startDate: { $dateOn: { type: "nextYear" } } }]
+                { startDate: { $dateOn: { type: "nextYear" } } }
+            ]
         }
     }
 });
@@ -28,13 +29,13 @@ const { data: { data: schedule } } = await ctx.api.request({
     url: 'schedule:get',
     params: {
         filterByTk: ctx.value,
-        appends: 'class,class.students,class.students.scores,course,course.weights,course.weights.assessment,course.weights.CLO,course.program,course.program.faculty'
+        appends: 'class,class.program,class.program.faculty,class.students,class.students.scores,course,course.weights,course.weights.assessment,course.weights.CLO'
     }
 });
 
-const { program } = schedule.course;
-const students = schedule.class.students.sort((a, b) => a.khmerName.localeCompare(b.khmerName, 'km'));
 const { weights } = schedule.course;
+const { program } = schedule.class;
+const students = schedule.class.students.sort((a, b) => a.khmerName.localeCompare(b.khmerName, 'km'));
 
 // 2. Logic: Group weights by CLO
 const closMap = {};
@@ -108,7 +109,7 @@ const SummaryTable = () => {
         <p style={{ textAlign: 'center' }}>
             បញ្ជីរាយនាមនិស្សិត {program.khmerName}
             <br />
-            ឆ្នាំទី{schedule.course.year} ជំនាន់ទី{semester.startYear - program.startYear + 1} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
+            ឆ្នាំទី{schedule.course.year} ជំនាន់ទី{semester.startYear - program.startYear + 1 - students[0].year} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
             <br />
             {schedule.course.khmerName} ថ្នាក់ {schedule.class.name}
         </p>

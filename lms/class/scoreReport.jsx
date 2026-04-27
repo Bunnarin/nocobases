@@ -4,15 +4,6 @@ const { React } = ctx.libs;
 const { useRef, forwardRef } = React;
 const { Button } = ctx.libs.antd;
 
-const GPAMap = (score) => {
-    if (score >= 85) return 4.0;
-    if (score >= 80) return 3.5;
-    if (score >= 70) return 3.0;
-    if (score >= 65) return 2.5;
-    if (score >= 50) return 2.0;
-    return 0.0;
-};
-
 // 1. Data Fetching
 const classId = await ctx.getVar('ctx.popup.resource.filterByTk');
 const { data: { data: classs } } = await ctx.api.request({
@@ -28,10 +19,11 @@ const { data: { data: semesters } } = await ctx.api.request({
     url: 'semester:list',
     params: {
         filter: {
-            $or:
-                [{ startDate: { $dateOn: { type: "lastYear" } } },
+            $or: [
+                { startDate: { $dateOn: { type: "lastYear" } } },
                 { startDate: { $dateOn: { type: "thisYear" } } },
-                { startDate: { $dateOn: { type: "nextYear" } } }]
+                { startDate: { $dateOn: { type: "nextYear" } } }
+            ]
         }
     }
 });
@@ -64,7 +56,8 @@ if (hasEngish)
     }).then(res => englishCourseSpec = JSON.parse(resObj(res).value));
 
 const getCourseInfo = (scores, courseId) => {
-    const courseScores = scores.filter(score => score.weight.courseId === courseId);
+    // some course have no weight
+    const courseScores = scores.filter(score => score.weight ? score.weight.courseId === courseId : score.courseId == courseId);
     let total = courseScores.reduce((acc, score) => acc + score.value, 0);
     const hasMakeup = courseScores.some(score => score.makeup);
 
@@ -85,11 +78,60 @@ const getCourseInfo = (scores, courseId) => {
     return { total, displayValue, hasMakeup };
 }
 
+const getGrade = (score) => {
+    if (score >= 85) return 'A';
+    if (score >= 80) return 'B+';
+    if (score >= 70) return 'B';
+    if (score >= 65) return 'C+';
+    if (score >= 50) return 'C';
+    if (score >= 45) return 'D';
+    if (score >= 40) return 'E';
+    return 'F';
+}
+
+const getGPA = (score) => {
+    if (score >= 85) return 4.0;
+    if (score >= 80) return 3.5;
+    if (score >= 70) return 3.0;
+    if (score >= 65) return 2.5;
+    if (score >= 50) return 2.0;
+    return 0.0;
+};
+
 const getGPAInfo = (scores, courseId) => {
     const { displayValue, hasMakeup } = getCourseInfo(scores, courseId);
     if (isNaN(displayValue)) return { value: displayValue, hasMakeup };
-    return { value: GPAMap(displayValue).toFixed(2), hasMakeup };
+    return { value: getGPA(displayValue).toFixed(2), hasMakeup };
 }
+
+// 3b. Pre-compute avgScore & rank for each student
+const studentStats = students.map(student => {
+    let studentHasMakeup = false;
+    const weightedTotalScore = courses.reduce((acc, course) => {
+        const { total, displayValue, hasMakeup } = getCourseInfo(student.scores, course.id);
+        if (hasMakeup) studentHasMakeup = true;
+        if (isNaN(displayValue)) return acc;
+        const credit = course.theoryCredit + course.practiceCredit;
+        return acc + total * credit;
+    }, 0);
+    const totalCredit = courses.reduce((acc, course) => {
+        const { displayValue } = getCourseInfo(student.scores, course.id);
+        if (isNaN(displayValue)) return acc;
+        const credit = course.theoryCredit + course.practiceCredit;
+        return acc + credit;
+    }, 0);
+    const avgScore = (weightedTotalScore / totalCredit).toFixed(2);
+    return { studentId: student.id, weightedTotalScore, avgScore, studentHasMakeup };
+});
+
+// Rank by avgScore descending – students with the same avgScore share the same rank
+const sorted = [...studentStats].sort((a, b) => b.avgScore - a.avgScore);
+const rankMap = {};
+let currentRank = 1;
+sorted.forEach((s, i) => {
+    if (i > 0 && s.avgScore !== sorted[i - 1].avgScore) currentRank = i + 1;
+    rankMap[s.studentId] = currentRank;
+});
 
 // 4. Components
 const DocTemplate = forwardRef((props, ref) => (<div ref={ref}>
@@ -135,27 +177,16 @@ const DocTemplate = forwardRef((props, ref) => (<div ref={ref}>
                 {courses.map(course => (<th>
                     {course.khmerName} <br /> {course.theoryCredit + course.practiceCredit} ({course.theoryCredit}-{course.practiceCredit})
                 </th>))}
-                <th>ពិន្ទុសរុប</th>
+                <th>ពិន្ទុសममូល</th>
                 <th>ពិន្ទុមធ្យម</th>
+                <th>GPA</th>
+                <th>លទ្ធផល</th>
+                <th>ចំណាត់ថ្នាក់</th>
             </tr>
         </thead>
         <tbody>
             {students.map((student, idx) => {
-                let studentHasMakeup = false;
-                const weightedTotalScore = courses.reduce((acc, course) => {
-                    const { total, displayValue, hasMakeup } = getCourseInfo(student.scores, course.id);
-                    if (hasMakeup) studentHasMakeup = true;
-                    // exclude the special courses
-                    if (isNaN(displayValue)) return acc;
-                    const credit = course.theoryCredit + course.practiceCredit;
-                    return acc + total * credit;
-                }, 0);
-                const totalCredit = courses.reduce((acc, course) => {
-                    const { displayValue } = getCourseInfo(student.scores, course.id);
-                    if (isNaN(displayValue)) return acc;
-                    const credit = course.theoryCredit + course.practiceCredit;
-                    return acc + credit;
-                }, 0);
+                const stats = studentStats.find(s => s.studentId === student.id);
                 return (
                     <tr key={student.id}>
                         <td>{idx + 1}</td>
@@ -167,8 +198,11 @@ const DocTemplate = forwardRef((props, ref) => (<div ref={ref}>
                             const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
                             return <td key={course.id}>{value}{hasMakeup ? '*' : ''}</td>;
                         })}
-                        <td>{weightedTotalScore}{studentHasMakeup ? '*' : ''}</td>
-                        <td>{(weightedTotalScore / totalCredit).toFixed(2)}{studentHasMakeup ? '*' : ''}</td>
+                        <td>{stats.weightedTotalScore}{stats.studentHasMakeup ? '*' : ''}</td>
+                        <td>{stats.avgScore}{stats.studentHasMakeup ? '*' : ''}</td>
+                        <td>{getGPA(stats.avgScore).toFixed(2)}</td>
+                        <td>{getGrade(stats.avgScore)}</td>
+                        <td>{rankMap[student.id]}</td>
                     </tr>
                 );
             })}
@@ -188,18 +222,17 @@ const DocTemplate = forwardRef((props, ref) => (<div ref={ref}>
                 <br />
                 រាជធានីភ្នំពេញ, ថ្ងៃទី ខែ ឆ្នាំ ២០២៦
                 <br />
-                ព្រឺទ្ធបុរស
+                ព្រឹទ្ធបុរស
             </td>
         </tr>
     </table>
-</div>));
+</div>))
 
 const App = () => {
     const docRef = useRef(null);
 
     const download = (isExcel = false) => {
-        const download = (isExcel = false) => {
-            const fullHTML = `
+        const fullHTML = `
             <html xmlns:o='urn:schemas-microsoft-com:office:office'
                   xmlns:w='urn:schemas-microsoft-com:office:${isExcel ? 'excel' : 'word'}'
                   xmlns='https://www.w3.org/TR/html40'>
@@ -221,13 +254,6 @@ const App = () => {
                 </body>
             </html>
         `;
-            const blob = new Blob([fullHTML], { type: isExcel ? 'application/vnd.ms-excel' : 'application/msword' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = isExcel ? 'export.xls' : 'export.doc';
-            a.click();
-            URL.revokeObjectURL(a.href);
-        };
         const blob = new Blob([fullHTML], { type: isExcel ? 'application/vnd.ms-excel' : 'application/msword' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);

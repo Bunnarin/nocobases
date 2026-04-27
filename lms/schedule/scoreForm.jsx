@@ -32,7 +32,7 @@ const { data: { data: schedule } } = await ctx.api.request({
     url: 'schedule:get',
     params: {
         filterByTk: ctx.value,
-        appends: 'course,course.program,course.program.faculty,course.weights,course.weights.assessment,course.weights.PLO,course.weights.CLO,class,class.students,class.students.scores'
+        appends: 'course,course.weights,course.weights.assessment,course.weights.PLO,course.weights.CLO,class,class.program,class.program.faculty,class.students,class.students.scores'
     },
 });
 
@@ -47,36 +47,42 @@ if (isEnglish)
     }).then(res => englishCourseSpec = JSON.parse(resObj(res).value));
 
 const students = schedule.class.students.sort((a, b) => a.khmerName?.localeCompare(b.khmerName, 'km'));
-const { weights, program } = schedule.course;
+const { weights } = schedule.course;
+const { program } = schedule.class;
+const hasWeights = weights.length > 0;
 
-const clos = Object.values(weights.reduce((acc, { assessment, CLO, PLO, weight, id: weightId }) => {
-    const currentCLO = CLO || { id: 0, number: '', statement: '' };
-    const currentPLO = PLO || { id: 0, number: '', statement: '' };
+// If no weights are configured, use a single synthetic column with max=100 and weightId=null
+let allClos = [{ weightId: null, weight: 100, assessmentName: 'ពិន្ទុ', cloNumber: '', ploNumber: '' }];
+if (hasWeights) {
+    allClos = Object.values(weights.reduce((acc, { assessment, CLO, PLO, weight, id: weightId }) => {
+        const currentCLO = CLO || { id: 0, number: '', statement: '' };
+        const currentPLO = PLO || { id: 0, number: '', statement: '' };
+        acc[currentCLO.id] ??= { ...currentCLO, PLOs: {} };
+        acc[currentCLO.id].PLOs[currentPLO.id] ??= { ...currentPLO, assessments: [] };
+        acc[currentCLO.id].PLOs[currentPLO.id].assessments.push({
+            ...assessment, weight, weightId, assessmentName: assessment.name
+        });
+        return acc;
+    }, {})).flatMap(clo =>
+        Object.values(clo.PLOs).flatMap(plo =>
+            plo.assessments.map(a => ({ ...a, cloNumber: clo.number, ploNumber: plo.number }))
+        )
+    );
+}
 
-    acc[currentCLO.id] ??= { ...currentCLO, PLOs: {} };
-    acc[currentCLO.id].PLOs[currentPLO.id] ??= { ...currentPLO, assessments: [] };
-
-    acc[currentCLO.id].PLOs[currentPLO.id].assessments.push({
-        ...assessment,
-        weight,
-        weightId,
-        assessmentName: assessment.name
-    });
-    return acc;
-}, {})).map(clo => ({
-    ...clo,
-    PLOs: Object.values(clo.PLOs)
-})).sort((a, b) => a.number - b.number);
-
-const allClos = clos.flatMap(clo =>
-    clo.PLOs.flatMap(plo =>
-        plo.assessments.map(assessment => ({
-            ...assessment,
-            cloNumber: clo.number,
-            ploNumber: plo.number
-        }))
-    )
-);
+// clos is only used for the grouped header when weights exist
+const clos = hasWeights
+    ? Object.values(weights.reduce((acc, { assessment, CLO, PLO, weight, id: weightId }) => {
+        const currentCLO = CLO || { id: 0, number: '', statement: '' };
+        const currentPLO = PLO || { id: 0, number: '', statement: '' };
+        acc[currentCLO.id] ??= { ...currentCLO, PLOs: {} };
+        acc[currentCLO.id].PLOs[currentPLO.id] ??= { ...currentPLO, assessments: [] };
+        acc[currentCLO.id].PLOs[currentPLO.id].assessments.push({
+            ...assessment, weight, weightId, assessmentName: assessment.name
+        });
+        return acc;
+    }, {})).map(clo => ({ ...clo, PLOs: Object.values(clo.PLOs) })).sort((a, b) => a.number - b.number)
+    : [];
 
 const totalMaxScore = allClos.reduce((sum, c) => sum + c.weight, 0);
 
@@ -120,9 +126,8 @@ const getBand = (score) => {
     return '';
 }
 
-const ScoreTable = forwardRef(({ scoreMap, onCommit, onPaste }, ref) => (
-    <div ref={ref}>
-        <style>{`
+const ScoreTable = forwardRef(({ scoreMap, onCommit, onPaste }, ref) => (<div ref={ref}>
+    <style>{`
             table, p { 
                 font-family: 'Khmer OS Battambang', sans-serif; 
                 border-collapse: collapse; 
@@ -139,187 +144,187 @@ const ScoreTable = forwardRef(({ scoreMap, onCommit, onPaste }, ref) => (
             }
         `}</style>
 
-        <table className="invisible-table">
+    <table className="invisible-table">
+        <tr>
+            <td><br /><br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}</td>
+            <td></td>
+            <td>ព្រះរាជាណាចក្រកម្ពុជា<br />ជាតិ សាសនា ព្រះមហាក្សត្រ</td>
+        </tr>
+    </table>
+
+    <p style={{ textAlign: 'center' }}>
+        បញ្ជីរាយនាមនិស្សិត {program.khmerName} <br />
+        ឆមាសទី {semester.number} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1} <br />
+        {schedule.course.khmerName} ថ្នាក់ {schedule.class.name}
+    </p>
+
+    <table>
+        <thead>
             <tr>
-                <td><br /><br />សាកលវិទ្យាល័យភូមិន្ទកសិកម្ម<br />{program.faculty.khmerName}</td>
-                <td></td>
-                <td>ព្រះរាជាណាចក្រកម្ពុជា<br />ជាតិ សាសនា ព្រះមហាក្សត្រ</td>
+                <th rowSpan={isEnglish || !hasWeights ? 1 : 4}>ល.រ.</th>
+                <th rowSpan={isEnglish || !hasWeights ? 1 : 4}>ID</th>
+                <th rowSpan={isEnglish || !hasWeights ? 1 : 4}>ឈ្មោះ</th>
+                <th rowSpan={isEnglish || !hasWeights ? 1 : 4}>name</th>
+                <th rowSpan={isEnglish || !hasWeights ? 1 : 4}>ភេទ</th>
+                <th rowSpan={isEnglish || !hasWeights ? 1 : 4}>ថ្ងៃខែឆ្នាំកំណើត</th>
+                {isEnglish ? (
+                    allClos.map(c => (<React.Fragment key={String(c.weightId)}>
+                        <th>{c.assessmentName} ({englishCourseSpec.weights.find(w => w.id === c.weightId)?.weight}%)</th>
+                        <th key={c.weightId + '-band'}>band</th>
+                    </React.Fragment>))
+                ) : !hasWeights ? (
+                    <th>ពិន្ទុ (100)</th>
+                ) : (
+                    clos.map(({ id, number, statement, PLOs }) =>
+                        <th key={id} title={statement}
+                            colSpan={PLOs.reduce((s, p) => s + p.assessments.length, 0)}
+                        >
+                            CLO {number}
+                        </th>
+                    )
+                )}
+                <th rowSpan={isEnglish || !hasWeights ? 1 : 4}>{isEnglish ? 'ពិន្ទុសមមូល' : 'សរុប'}</th>
+                {isEnglish && <th>band</th>}
+                <th rowSpan={isEnglish || !hasWeights ? 1 : 4}>លទ្ធផល {isEnglish && semester.number == 1 ? 'ឆមាសទី១' : ''}</th>
+                {isEnglish && semester.number == 1 && <th rowSpan={isEnglish || !hasWeights ? 1 : 4}>លទ្ធផល ឆមាសទី២</th>}
             </tr>
-        </table>
-
-        <p style={{ textAlign: 'center' }}>
-            បញ្ជីរាយនាមនិស្សិត {program.khmerName} <br />
-            ឆមាសទី {semester.number} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1} <br />
-            {schedule.course.khmerName} ថ្នាក់ {schedule.class.name}
-        </p>
-
-        <table>
-            <thead>
+            {!isEnglish && hasWeights && (<>
                 <tr>
-                    <th rowSpan={isEnglish ? 1 : 4}>ល.រ.</th>
-                    <th rowSpan={isEnglish ? 1 : 4}>ID</th>
-                    <th rowSpan={isEnglish ? 1 : 4}>ឈ្មោះ</th>
-                    <th rowSpan={isEnglish ? 1 : 4}>name</th>
-                    <th rowSpan={isEnglish ? 1 : 4}>ភេទ</th>
-                    <th rowSpan={isEnglish ? 1 : 4}>ថ្ងៃខែឆ្នាំកំណើត</th>
-                    {isEnglish ? (
-                        allClos.map(c => (<React.Fragment key={c.weightId}>
-                            <th>{c.assessmentName} ({englishCourseSpec.weights.find(w => w.id === c.weightId)?.weight}%)</th>
-                            <th key={c.weightId + '-band'}>band</th>
-                        </React.Fragment>))
-                    ) : (
-                        clos.map(({ id, number, statement, PLOs }) => {
-                            const totalAssessments = PLOs.reduce((s, p) => s + p.assessments.length, 0);
-                            return (
-                                <th key={id} colSpan={totalAssessments} title={statement}>
-                                    {number ? `CLO ${number}` : ''}
-                                </th>
-                            );
-                        })
+                    {clos.map(({ PLOs }) =>
+                        PLOs.map(plo => (
+                            <th key={plo.id} colSpan={plo.assessments.length} title={plo.statement}>
+                                PLO {plo.number}
+                            </th>
+                        ))
                     )}
-                    <th rowSpan={isEnglish ? 1 : 4}>{isEnglish ? 'ពិន្ទុសមមូល' : 'សរុប'}</th>
-                    {isEnglish && <th>band</th>}
-                    <th rowSpan={isEnglish ? 1 : 4}>លទ្ធផល {isEnglish && semester.number == 1 ? 'ឆមាសទី១' : ''}</th>
-                    {isEnglish && semester.number == 1 && <th rowSpan={isEnglish ? 1 : 4}>លទ្ធផល ឆមាសទី២</th>}
                 </tr>
-                {!isEnglish && (<>
-                    <tr>
-                        {clos.map(({ PLOs }) =>
-                            PLOs.map(plo => (
-                                <th key={plo.id} colSpan={plo.assessments.length} title={plo.statement}>
-                                    {plo.number ? `PLO ${plo.number}` : ''}
+                <tr>
+                    {clos.map(({ PLOs }) =>
+                        PLOs.map(plo =>
+                            plo.assessments.map(c => (
+                                <th key={c.weightId} title={c.assessmentName} style={{ padding: '4px', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {c.assessmentName}
                                 </th>
                             ))
-                        )}
-                    </tr>
-                    <tr>
-                        {clos.map(({ PLOs }) =>
-                            PLOs.map(plo =>
-                                plo.assessments.map(c => (
-                                    <th key={c.weightId} title={c.assessmentName} style={{ padding: '4px', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {c.assessmentName}
-                                    </th>
-                                ))
-                            )
-                        )}
-                    </tr>
-                    <tr>
-                        {clos.map(({ PLOs }) =>
-                            PLOs.map(plo =>
-                                plo.assessments.map(c => (
-                                    <th key={c.weightId + '-max'}>
-                                        {c.weight}
-                                    </th>
-                                ))
-                            )
-                        )}
-                    </tr>
-                </>)}
-            </thead>
-            <tbody>
-                {students.map((student, rowIndex) => {
-                    let { total, hasMakeup } = getTotal(student.id, scoreMap);
-                    let pass = total / totalMaxScore >= 0.5;
+                        )
+                    )}
+                </tr>
+                <tr>
+                    {clos.map(({ PLOs }) =>
+                        PLOs.map(plo =>
+                            plo.assessments.map(c => (
+                                <th key={c.weightId + '-max'}>
+                                    {c.weight}
+                                </th>
+                            ))
+                        )
+                    )}
+                </tr>
+            </>)}
+        </thead>
+        <tbody>
+            {students.map((student, rowIndex) => {
+                let { total, hasMakeup } = getTotal(student.id, scoreMap);
+                let pass = total / totalMaxScore >= 0.5;
 
-                    let passSem2;
-                    if (isEnglish) {
-                        total = 0;
-                        englishCourseSpec.weights.forEach(({ id, weight }) => {
-                            const entry = scoreMap[scoreKey(student.id, id)];
-                            if (!entry) return;
-                            total += entry.value * weight / 100;
-                        });
-                        total = Math.round(total);
-                        const passThreshold = englishCourseSpec.semesterPassThresholds[semester.number - 1];
-                        pass = total >= passThreshold;
+                let passSem2;
+                if (isEnglish) {
+                    total = 0;
+                    englishCourseSpec.weights.forEach(({ id, weight }) => {
+                        const entry = scoreMap[scoreKey(student.id, id)];
+                        if (!entry) return;
+                        total += entry.value * weight / 100;
+                    });
+                    total = Math.round(total);
+                    const passThreshold = englishCourseSpec.semesterPassThresholds[semester.number - 1];
+                    pass = total >= passThreshold;
 
-                        if (semester.number == 1) {
-                            const secondPassThreshold = englishCourseSpec.semesterPassThresholds[semester.number];
-                            passSem2 = total >= secondPassThreshold;
-                        }
+                    if (semester.number == 1) {
+                        const secondPassThreshold = englishCourseSpec.semesterPassThresholds[semester.number];
+                        passSem2 = total >= secondPassThreshold;
                     }
+                }
 
-                    const passColor = (pass) => pass ? '#e6ffe6' : '#f8d0d0ff';
+                const passColor = (pass) => pass ? '#e6ffe6' : '#f8d0d0ff';
 
-                    return (
-                        <tr key={student.id}>
-                            <td>{rowIndex + 1}</td>
-                            <td>{student.id}</td>
-                            <td>{student.khmerName}</td>
-                            <td>{student.englishName}</td>
-                            <td>{student.sex}</td>
-                            <td>{student.birthday}</td>
-                            {allClos.map((clo, colIndex) => {
-                                const entry = scoreMap[scoreKey(student.id, clo.weightId)];
+                return (
+                    <tr key={student.id}>
+                        <td>{rowIndex + 1}</td>
+                        <td>{student.id}</td>
+                        <td>{student.khmerName}</td>
+                        <td>{student.englishName}</td>
+                        <td>{student.sex}</td>
+                        <td>{student.birthday}</td>
+                        {allClos.map((clo, colIndex) => {
+                            const entry = scoreMap[scoreKey(student.id, clo.weightId)];
 
-                                return (<React.Fragment key={scoreKey(student.id, clo.weightId)}>
-                                    <td style={{ backgroundColor: passColor(isEnglish ? entry?.value > 0 : entry?.value >= clo.weight * 0.5) }}>
-                                        <span className="export-text" style={{ display: 'none' }}>
-                                            {entry?.value}
-                                            {entry?.makeup ? '*' : ''}
-                                        </span>
-                                        <span className="no-export">
-                                            <input
-                                                type="text"
-                                                data-row={rowIndex}
-                                                data-col={colIndex}
-                                                value={entry?.raw ?? entry?.value ?? ''}
-                                                onChange={(e) => onCommit(student.id, clo.weightId, e.target.value, clo.weight)}
-                                                onKeyDown={(e) => {
-                                                    let r = rowIndex, c = colIndex;
-                                                    if (e.key === 'Enter' || e.key === 'ArrowDown') r++;
-                                                    else if (e.key === 'ArrowUp') r--;
-                                                    else if (e.key === 'ArrowRight') c++;
-                                                    else if (e.key === 'ArrowLeft') c--;
-                                                    else return;
-                                                    const next = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
-                                                    if (next) { e.preventDefault(); next.focus(); next.select(); }
-                                                }}
-                                                onPaste={(e) => onPaste(e, rowIndex, colIndex)}
-                                                onFocus={(e) => e.target.select()}
-                                                onBlur={(e) => {
-                                                    const val = e.target.value;
-                                                    const formatted = (val === '' || val === '.') ? '' : String(parseFloat(val));
-                                                    onCommit(student.id, clo.weightId, formatted, clo.weight, true);
-                                                }}
-                                                style={{ backgroundColor: 'transparent', border: 'none', width: '45px', textAlign: 'center', outline: 'none', color: 'inherit' }}
-                                            />
-                                            {entry?.makeup ? '*' : ''}
-                                        </span>
-                                    </td>
-                                    {isEnglish && <td>{getBand(Math.round(entry?.value))}</td>}
-                                </React.Fragment>);
-                            })}
-                            <td>{total}{hasMakeup ? '*' : ''}</td>
-                            {isEnglish && <td>{getBand(Math.round(total))}</td>}
-                            <td style={{ backgroundColor: passColor(pass) }}>{pass ? 'sastified' : 'unsastified'}{hasMakeup ? '*' : ''}</td>
-                            {isEnglish && semester.number == 1 && <td style={{ backgroundColor: passColor(passSem2) }}>{passSem2 ? 'ជាប់ស្វ័យប្រវត្តិ' : 'តម្រូវឲ្យប្រឡង'}</td>}
-                        </tr>
-                    )
-                })}
-            </tbody>
-        </table>
+                            return (<React.Fragment key={scoreKey(student.id, clo.weightId)}>
+                                <td style={{ backgroundColor: passColor(isEnglish ? entry?.value > 0 : entry?.value >= clo.weight * 0.5) }}>
+                                    <span className="export-text" style={{ display: 'none' }}>
+                                        {entry?.value}
+                                        {entry?.makeup ? '*' : ''}
+                                    </span>
+                                    <span className="no-export">
+                                        <input
+                                            type="text"
+                                            data-row={rowIndex}
+                                            data-col={colIndex}
+                                            value={entry?.value ?? ''}
+                                            onChange={(e) => onCommit(student.id, clo.weightId, e.target.value, clo.weight)}
+                                            onKeyDown={(e) => {
+                                                let r = rowIndex, c = colIndex;
+                                                if (e.key === 'Enter' || e.key === 'ArrowDown') r++;
+                                                else if (e.key === 'ArrowUp') r--;
+                                                else if (e.key === 'ArrowRight') c++;
+                                                else if (e.key === 'ArrowLeft') c--;
+                                                else return;
+                                                const next = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+                                                if (next) { e.preventDefault(); next.focus(); next.select(); }
+                                            }}
+                                            onPaste={(e) => onPaste(e, rowIndex, colIndex)}
+                                            onFocus={(e) => e.target.select()}
+                                            onBlur={(e) => {
+                                                const val = e.target.value;
+                                                const formatted = (val === '' || val === '.') ? '' : String(parseFloat(val));
+                                                onCommit(student.id, clo.weightId, formatted, clo.weight, true);
+                                            }}
+                                            style={{ backgroundColor: 'transparent', border: 'none', width: '45px', textAlign: 'center', outline: 'none', color: 'inherit' }}
+                                        />
+                                        {entry?.makeup ? '*' : ''}
+                                    </span>
+                                </td>
+                                {isEnglish && <td>{getBand(Math.round(entry?.value))}</td>}
+                            </React.Fragment>);
+                        })}
+                        <td>{total}{hasMakeup ? '*' : ''}</td>
+                        {isEnglish && <td>{getBand(Math.round(total))}</td>}
+                        <td style={{ backgroundColor: passColor(pass) }}>{pass ? 'sastified' : 'unsastified'}{hasMakeup ? '*' : ''}</td>
+                        {isEnglish && semester.number == 1 && <td style={{ backgroundColor: passColor(passSem2) }}>{passSem2 ? 'ជាប់ស្វ័យប្រវត្តិ' : 'តម្រូវឲ្យប្រឡង'}</td>}
+                    </tr>
+                )
+            })}
+        </tbody>
+    </table>
 
-        <table className="invisible-table">
-            <tr>
-                <td>
-                    សំគាល់៖ ពិន្ទុដែលទទួលបាន 0.00 ឬ Unsatisfied ជាពិន្ទុប្រឡងធ្លាក់ដែលត្រូវប្រឡងសង។
-                    <br /><br />
-                    បានឃើញ និងឯកភាព
-                    <br />
-                    ប្រធានគណៈកម្មការប្រឡង
-                </td>
-                <td>
-                    ថ្ងៃ ខែ ឆ្នាំម្សាញ់ សប្តស័ក ព.ស ២៥៦៩
-                    <br />
-                    រាជធានីភ្នំពេញ, ថ្ងៃទី ខែ ឆ្នាំ ២០២៦
-                    <br />
-                    ព្រឺទ្ធបុរស
-                </td>
-            </tr>
-        </table>
-    </div>
-));
+    <table className="invisible-table">
+        <tr>
+            <td>
+                សំគាល់៖ ពិន្ទុដែលទទួលបាន 0.00 ឬ Unsatisfied ជាពិន្ទុប្រឡងធ្លាក់ដែលត្រូវប្រឡងសង។
+                <br /><br />
+                បានឃើញ និងឯកភាព
+                <br />
+                ប្រធានគណៈកម្មការប្រឡង
+            </td>
+            <td>
+                ថ្ងៃ ខែ ឆ្នាំម្សាញ់ សប្តស័ក ព.ស ២៥៦៩
+                <br />
+                រាជធានីភ្នំពេញ, ថ្ងៃទី ខែ ឆ្នាំ ២០២៦
+                <br />
+                ព្រឺទ្ធបុរស
+            </td>
+        </tr>
+    </table>
+</div>));
 
 const App = () => {
     const [scoreMap, setScoreMap] = useState(buildInitialScoreMap);
@@ -332,22 +337,23 @@ const App = () => {
         if (rawValue !== '' && !/^\d*\.?\d*$/.test(rawValue)) return;
 
         const num = (rawValue === '' || rawValue === '.') ? 0 : parseFloat(rawValue);
-        if (num < 0 || num > max)
-            return ctx.message.error(`must be between 0 and ${max}`);
+        const effectiveMax = max ?? 100;
+        if (num < 0 || num > effectiveMax)
+            return ctx.message.error(`must be between 0 and ${effectiveMax}`);
 
         const key = scoreKey(studentId, weightId);
 
         setScoreMap(prev => ({
             ...prev,
-            [key]: { ...prev[key], raw: rawValue, value: num, makeup: isMakeup }
+            [key]: { ...prev[key], value: num, makeup: isMakeup }
         }));
 
         const execute = () => {
             timeoutsMap.current[key] = null;
             const student = students.find(({ id }) => id == studentId);
-            const originalScore = student.scores?.find(s => s.weightId == weightId);
+            const originalScore = student.scores.find(s => s.weightId == weightId && s.courseId == schedule.courseId);
 
-            if (originalScore)
+            if (originalScore && originalScore.value != num)
                 ctx.api.request({
                     url: 'score:update',
                     method: 'POST',
@@ -356,7 +362,12 @@ const App = () => {
                 }).then(res => {
                     const idx = student.scores.findIndex(s => s.weightId == weightId);
                     student.scores[idx] = resObj(res);
-                });
+                }).catch(() =>
+                    setScoreMap(prev => ({
+                        ...prev,
+                        [key]: { ...prev[key], value: originalScore.value, makeup: originalScore.makeup }
+                    }))
+                );
             else
                 ctx.api.request({
                     url: 'score:create',
@@ -364,28 +375,32 @@ const App = () => {
                     data: {
                         student: student.id,
                         weight: weightId,
-                        course: schedule.course.id,
+                        course: schedule.courseId,
                         value: num,
                         makeup: isMakeup
                     }
-                }).then(res => student.scores.push(resObj(res)));
+                }).then(res => student.scores.push(resObj(res))
+                ).catch(() =>
+                    setScoreMap(prev => ({
+                        ...prev,
+                        [key]: { ...prev[key], value: 0, makeup: false }
+                    }))
+                );
         };
 
-        if (instant) {
-            if (timeoutsMap.current[key]) {
-                clearTimeout(timeoutsMap.current[key]);
-                execute();
-            }
-        } else {
-            if (timeoutsMap.current[key]) clearTimeout(timeoutsMap.current[key]);
+        if (timeoutsMap.current[key])
+            clearTimeout(timeoutsMap.current[key]);
+
+        if (instant && timeoutsMap.current[key])
+            execute();
+        else if (!instant)
             timeoutsMap.current[key] = setTimeout(execute, 1000);
-        }
     };
 
     const handlePaste = async (e, startRowIdx, startColIdx) => {
         e.preventDefault();
         const text = e.clipboardData.getData('Text');
-        if (!text) return;
+        if (!text.trim()) return;
 
         const rows = text.trim().split(/\r?\n/).map(row => row.split('\t'));
 
@@ -429,11 +444,11 @@ const App = () => {
             const next = { ...prev };
             updates.forEach(({ student, clo, val }) => {
                 const key = scoreKey(student.id, clo.weightId);
-                const originalScore = student.scores?.find(s => s.weightId == clo.weightId);
+                const originalScore = student.scores.find(s => s.weightId == clo.weightId && s.courseId == schedule.courseId);
 
-                next[key] = { ...next[key], raw: String(val), value: val, makeup: globalMakeup };
+                next[key] = { ...next[key], value: val, makeup: globalMakeup };
 
-                if (originalScore)
+                if (originalScore && originalScore.value != val)
                     ctx.api.request({
                         url: 'score:update',
                         method: 'POST',
@@ -450,7 +465,7 @@ const App = () => {
                         data: {
                             student: student.id,
                             weight: clo.weightId,
-                            course: schedule.course.id,
+                            course: schedule.courseId,
                             value: val,
                             makeup: globalMakeup
                         }
@@ -491,7 +506,6 @@ const App = () => {
     };
 
     return (<>
-        <h1>{schedule.course.khmerName}</h1>
         <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '20px' }}>
             <span>
                 ប្រឡងសង?

@@ -25,10 +25,11 @@ const { data: { data: semesters } } = await ctx.api.request({
   url: 'semester:list',
   params: {
     filter: {
-      $or:
-        [{ startDate: { $dateOn: { type: "lastYear" } } },
+      $or: [
+        { startDate: { $dateOn: { type: "lastYear" } } },
         { startDate: { $dateOn: { type: "thisYear" } } },
-        { startDate: { $dateOn: { type: "nextYear" } } }]
+        { startDate: { $dateOn: { type: "nextYear" } } }
+      ]
     }
   }
 });
@@ -60,8 +61,9 @@ if (closerToEnd) {
     },
   }).then(({ data }) => CLOs = data.data.course.CLOs);
   questions.push(...CLOs.map(CLO => ({
-    label: `សូមវាយតម្លៃសមត្ថភាពដែលប្អូនទទួលបានសម្រាប់ CLO "${CLO.khmerStatement || CLO.statement}"`,
+    label: `សូមវាយតម្លៃសមត្ថភាពដែលប្អូនទទួលបានសម្រាប់ CLO ${CLO.number} "${CLO.khmerStatement || CLO.statement}"`,
     type: 'mcq',
+    required: true,
     choices: '<50\n51-60\n61-70\n71-80\n81-90\n91-100'
   })));
 }
