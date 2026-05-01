@@ -198,9 +198,11 @@ const DocTemplate = forwardRef(({ selectedProgramId, selectedYear, selectedGener
         <table className="invisible-table">
             <tr>
                 <td>
-                    ចំនួននិស្សិតសរុប៖ {filtered.reduce((acc, s) => acc + (s.majors?.length || 0), 0)}នាក់ (ស្រី៖ {filtered.filter(s => s.sex == 'F').reduce((acc, s) => acc + (s.majors?.length || 0), 0)}នាក់)
-                    <br />
-                    សរុបជាក់ស្ដែង៖ {filtered.length}នាក់ (ស្រី៖ {filtered.filter(s => s.sex == 'F').length}នាក់)
+                    {facultyId == 1 && <>
+                        ចំនួននិស្សិតសរុប(រាប់ជំនាញ២)៖ {filtered.reduce((acc, s) => acc + (s.majors?.length || 0), 0)}នាក់ (ស្រី៖ {filtered.filter(s => s.sex == 'F').reduce((acc, s) => acc + (s.majors?.length || 0), 0)}នាក់)
+                        <br />
+                    </>}
+                    ចំនួននិស្សិតសរុប៖ {filtered.length}នាក់ (ស្រី៖ {filtered.filter(s => s.sex == 'F').length}នាក់)
                     <br /><br />
                     បានឃើញ និងឯកភាព
                     <br />

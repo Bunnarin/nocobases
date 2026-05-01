@@ -1,3 +1,5 @@
+const resObj = (res) => Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
+
 const { Button } = ctx.libs.antd;
 const React = ctx.libs.React;
 const { useState } = React;
@@ -22,7 +24,7 @@ const { data: { data: schedule } } = await ctx.api.request({
     }
 });
 
-const students = schedule.class.students;
+const { students } = schedule.class;
 
 const App = () => {
     // Initialize state
@@ -118,7 +120,7 @@ const App = () => {
                     method: 'POST',
                     params: { filterByTk: state.id },
                     data: { status: state.status }
-                }).then(({ data }) => newRecord = data.data);
+                }).then(res => newRecord = resObj(res));
             else if (!state.id)
                 await ctx.api.request({
                     url: 'attendance:create',
@@ -131,7 +133,7 @@ const App = () => {
                         course: schedule.courseId,
                         comment: state.comment
                     }
-                }).then(({ data }) => newRecord = data.data);
+                }).then(res => newRecord = resObj(res));
             return newRecord;
         }));
 
@@ -153,7 +155,7 @@ const App = () => {
 
     return (
         <div style={{
-            fontFamily: "'Inter', 'Khmer OS Battambang', sans-serif",
+            fontFamily: "'Khmer OS Battambang', sans-serif",
         }}>
             <Button onClick={() => markAll('P')}>
                 Mark All Present

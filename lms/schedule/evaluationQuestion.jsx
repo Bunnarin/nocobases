@@ -1,3 +1,5 @@
+const resObj = (res) => Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
+
 const scheduleId = await ctx.getVar('ctx.popup.resource.filterByTk');
 
 const { React } = ctx.libs;
@@ -12,9 +14,9 @@ await ctx.api.request({
   params: {
     filterByTk: 'evaluationDeadline'
   },
-}).then(({ data }) => {
-  if (data?.data?.value)
-    deadlinePassed = new Date(data.data.value) <= new Date();
+}).then(res => {
+  if (resObj(res).value)
+    deadlinePassed = new Date(resObj(res).value) <= new Date();
 });
 
 let { data: { data: questions } } = await ctx.api.request({
@@ -44,7 +46,7 @@ const semester = semesters.reduce((prev, curr) => {
   return currDiff < prevDiff ? curr : prev;
 });
 
-// if today is closer to the end than the mid of the semester, then we append the CLo qs
+// if today is closer to the end than the mid of the semester, then we append the CLO qs
 const now = new Date().getTime();
 const start = new Date(semester.startDate).getTime();
 const end = new Date(semester.endDate).getTime();
@@ -57,9 +59,9 @@ if (closerToEnd) {
     url: 'schedule:get',
     params: {
       filterByTk: scheduleId,
-      appends: 'course,course.CLOs'
+      appends: 'course.CLOs'
     },
-  }).then(({ data }) => CLOs = data.data.course.CLOs);
+  }).then(res => CLOs = resObj(res).course.CLOs);
   questions.push(...CLOs.map(CLO => ({
     label: `សូមវាយតម្លៃសមត្ថភាពដែលប្អូនទទួលបានសម្រាប់ CLO ${CLO.number} "${CLO.khmerStatement || CLO.statement}"`,
     type: 'mcq',
@@ -80,58 +82,35 @@ const App = () => {
       return ctx.message.error('Deadline has passed. You cannot submit changes.');
 
     // Validate required fields
+    const emptyAnswers = ['គ្មាន', 'អត់មាន', 'មិនមាន', 'none', 'n/a'];
     for (const field of questions)
       if (field.required && !formData[field.label])
         return ctx.message.error(`Please answer: ${field.label}`);
+      // don't want to store empty answer
+      else if (!field.required && field.type == 'text' && 
+        emptyAnswers.includes(formData[field.label]?.trim()?.toLowerCase().replace('ទេ', '')))
+        formData[field.label] = '';
 
-    // so that the fetched answer counter dont get stale
-    const { data: { data: schedule } } = await ctx.api.request({
-      url: 'schedule:get',
-      params: {
-        filterByTk: scheduleId,
-        appends: 'completedStudents'
-      },
-    });
-
-    if (schedule.completedStudents.find(s => s.id === ctx.user.studentId))
-      return ctx.message.error('You have already submitted your answers.');
-
-    // lazy reset: keep data until first student submits
-    const noStudentYet = schedule.completedStudents.length == 0;
-    if (noStudentYet) // reset counter (yes forgive me for delegating this task to the frontend)
-      Object.keys(schedule).forEach(key => {
-        if (key.startsWith('question'))
-          schedule[key] = {};
-      });
-
-    questions.forEach((field, i) => {
-      schedule[`question${i}`] ??= {};
-      if (field.type === 'checkbox') {
-        const values = formData[field.label] || [];
-        values.forEach((value) => {
-          schedule[`question${i}`][value] ??= 0;
-          schedule[`question${i}`][value] += 1;
-        });
-      } else {
-        const value = formData[field.label];
-        if (!value) return;
-        schedule[`question${i}`][value] ??= 0;
-        schedule[`question${i}`][value] += 1;
+    await ctx.api.request({
+      url: 'workflows.endpoint:execute?title=submit-evaluation',
+      method: 'POST',
+      data: {
+        scheduleId,
+        answers: questions.map(q => formData[q.label]?.trim())
       }
     });
 
-    await ctx.api.request({
-      url: 'schedule:update',
-      method: 'POST',
-      params: { filterByTk: scheduleId },
-      data: schedule
-    });
-
-    ctx.message.success('you can close the popup now');
+    ctx.message.success('រួចរាល់');
+    setTimeout(() => window.location.href = '/', 3000);
   };
 
   return (
-    <form onSubmit={handleSubmit} style={containerStyle}>
+    <form onSubmit={handleSubmit} style={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '1.5rem',
+      fontFamily: 'Khmer OS Battambang'
+    }}>
       {deadlinePassed && <div style={{
         position: 'absolute',
         top: 0, left: 0, right: 0, bottom: 0,
@@ -142,21 +121,24 @@ const App = () => {
         justifyContent: 'center',
       }}></div>}
       {questions.map((field, index) => (
-        <div key={index} style={fieldGroupStyle}>
+        <div key={index} style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.5rem'
+        }}>
           <label>
             {field.label}
             {field.required && <span style={{ color: '#ef4444' }}>*</span>}
           </label>
 
-          {/* Text Inputs */}
           {field.type === 'text' && (
             <Input
-              value={formData[field.label] || ''}
+              placeholder={!field.required && 'បើគ្មានមិនបាច់សរសេរទេ'}
+              value={formData[field.label]}
               onChange={(e) => handleInputChange(field.label, e.target.value)}
             />
           )}
 
-          {/* Select Inputs (MCQ or Checkbox) */}
           {(field.type === 'mcq' || field.type === 'checkbox') && (
             <Select
               mode={field.type === 'checkbox' ? 'multiple' : undefined}
@@ -177,19 +159,6 @@ const App = () => {
       </Button>
     </form>
   );
-};
-
-const containerStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '1.5rem',
-  fontFamily: 'Khmer OS Battambang'
-};
-
-const fieldGroupStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.5rem'
 };
 
 ctx.render(<App />);

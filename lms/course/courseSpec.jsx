@@ -1,6 +1,13 @@
 // bcuz the nocobase res isn't consistent
 const resObj = (res) => Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
 
+const { React } = ctx.libs;
+const { useState } = React;
+const { Select, Button, Modal } = ctx.libs.antd;
+
+const weightToDetach = [];
+const cloToDetach = [];
+
 // get config, see if we're allowed to make change during this period
 // this KV table has a key val pair. it's is ISOstring that tells us the last date that we're allowed to make change
 let deadlinePassed = true;
@@ -41,13 +48,6 @@ const { data: { data: assessments } } = await ctx.api.request({
     }
 });
 
-const { React } = ctx.libs;
-const { useState } = React;
-const { Select, Button, Modal } = ctx.libs.antd;
-
-const weightToDetach = [];
-const cloToDetach = [];
-
 const App = () => {
     const [weights, setWeights] = useState(oldWeights);
     const [localCLOs, setLocalCLOs] = useState(CLOs);
@@ -58,10 +58,14 @@ const App = () => {
         if (deadlinePassed)
             return ctx.message.error('Deadline has passed. You cannot submit changes.');
 
-        let totalWeight = 0;
-        weights.forEach(w => totalWeight += w.weight);
+        const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
         if (totalWeight !== 100)
             return ctx.message.error('the total weight is not 100%');
+
+        // make sure each weight have assessment and PLO
+        for (const w of weights)
+            if (!w.assessmentId || !w.PLOId)
+                return ctx.message.error('Please select an assessment and PLO for all weights');
 
         // make sure that all CLO haver khmerStatement
         for (const clo of localCLOs)
@@ -100,7 +104,11 @@ const App = () => {
                         khmerStatement: clo.khmerStatement,
                         course: ctx.value
                     }
-                });
+                }).then(res => {
+                    const newId = resObj(res).id;
+                    // so that the weight with tempId gets the dbId
+                    cloIdMap[clo.id] = newId;
+                })
             else if (clo.edited)
                 ctx.api.request({
                     url: 'CLO:update',
@@ -123,18 +131,17 @@ const App = () => {
                 ...w,
                 assessment: w.assessmentId,
                 PLO: w.PLOId,
-                CLO: cloIdMap[w.CLOId] || w.CLOId
+                // map from temp id to db id
+                CLO: cloIdMap[w.CLOId]
             };
             delete payload.id;
 
-            const { data: { data: newWeight } } = await ctx.api.request({
+            await ctx.api.request({
                 url: 'weight:create',
                 method: 'POST',
                 data: payload
-            });
+            }).then(res => currentWeights[i] = resObj(res));
 
-            // Update local snapshot and state
-            currentWeights[i] = newWeight;
             setWeights([...currentWeights]);
         }
         ctx.message.success('done. you can close this popup now');
@@ -335,7 +342,6 @@ const App = () => {
                                     showSearch
                                     placeholder="Select Assessment"
                                     onSearch={setAssessmentSearch}
-                                    onBlur={() => setAssessmentSearch('')}
                                     filterOption={false}
                                     value={w.assessmentId || undefined}
                                     disabled={!w.PLOId || isLocked}
