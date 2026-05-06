@@ -1,5 +1,5 @@
 const { React } = ctx.libs;
-const { Button, Switch } = ctx.libs.antd;
+const { Button, Switch, Modal } = ctx.libs.antd;
 const { useRef, useState, forwardRef } = React;
 
 const resObj = (res) => Array.isArray(res.data.data) ? res.data.data[0] : res.data.data;
@@ -284,8 +284,8 @@ const ScoreTable = forwardRef(({ scoreMap, onCommit, onPaste }, ref) => (<div re
                                             onPaste={(e) => onPaste(e, rowIndex, colIndex)}
                                             onFocus={(e) => e.target.select()}
                                             onBlur={(e) => {
-                                                const val = e.target.value;
-                                                const formatted = (val === '' || val === '.') ? '' : String(parseFloat(val));
+                                                const value = e.target.value;
+                                                const formatted = (value === '' || value === '.') ? '' : String(parseFloat(value));
                                                 onCommit(student.id, clo.weightId, formatted, clo.weight, true);
                                             }}
                                             style={{ backgroundColor: 'transparent', border: 'none', width: '45px', textAlign: 'center', outline: 'none', color: 'inherit' }}
@@ -328,7 +328,7 @@ const ScoreTable = forwardRef(({ scoreMap, onCommit, onPaste }, ref) => (<div re
 
 const App = () => {
     const [scoreMap, setScoreMap] = useState(buildInitialScoreMap);
-    const [isMakeup, setIsMakeup] = useState(Object.values(scoreMap).some(s => !!s.makeup));
+    const [makeup, setMakeup] = useState(Object.values(scoreMap).some(s => !!s.makeup));
 
     const docRef = useRef(null);
     const timeoutsMap = useRef({});
@@ -336,16 +336,16 @@ const App = () => {
     const handleCommit = (studentId, weightId, rawValue, max, instant = false) => {
         if (rawValue !== '' && !/^\d*\.?\d*$/.test(rawValue)) return;
 
-        const num = (rawValue === '' || rawValue === '.') ? 0 : parseFloat(rawValue);
+        const value = (rawValue === '' || rawValue === '.') ? 0 : parseFloat(rawValue);
         const effectiveMax = max ?? 100;
-        if (num < 0 || num > effectiveMax)
+        if (value < 0 || value > effectiveMax)
             return ctx.message.error(`must be between 0 and ${effectiveMax}`);
 
         const key = scoreKey(studentId, weightId);
 
         setScoreMap(prev => ({
             ...prev,
-            [key]: { ...prev[key], value: num, makeup: isMakeup }
+            [key]: { ...prev[key], value, makeup }
         }));
 
         const execute = () => {
@@ -353,22 +353,22 @@ const App = () => {
             const student = students.find(({ id }) => id == studentId);
             const originalScore = student.scores.find(s => s.weightId == weightId && s.courseId == schedule.courseId);
 
-            if (originalScore && originalScore.value != num)
+            if (originalScore && originalScore.value != value)
                 ctx.api.request({
                     url: 'score:update',
                     method: 'POST',
                     params: { filterByTk: originalScore.id },
-                    data: { value: num, makeup: isMakeup }
+                    data: { value, makeup }
                 }).then(res => {
                     const idx = student.scores.findIndex(s => s.weightId == weightId);
                     student.scores[idx] = resObj(res);
                 }).catch(() =>
                     setScoreMap(prev => ({
                         ...prev,
-                        [key]: { ...prev[key], value: originalScore.value, makeup: originalScore.makeup }
+                        [key]: { ...prev[key], value: originalScore.value, makeup }
                     }))
                 );
-            else
+            else if (!originalScore && value > 0)
                 ctx.api.request({
                     url: 'score:create',
                     method: 'POST',
@@ -376,14 +376,15 @@ const App = () => {
                         student: student.id,
                         weight: weightId,
                         course: schedule.courseId,
-                        value: num,
-                        makeup: isMakeup
+                        value,
+                        makeup
                     }
-                }).then(res => student.scores.push(resObj(res))
+                }).then(res =>
+                    student.scores.push(resObj(res))
                 ).catch(() =>
                     setScoreMap(prev => ({
                         ...prev,
-                        [key]: { ...prev[key], value: 0, makeup: false }
+                        [key]: { ...prev[key], value: 0, makeup }
                     }))
                 );
         };
@@ -397,22 +398,73 @@ const App = () => {
             timeoutsMap.current[key] = setTimeout(execute, 1000);
     };
 
-    const handlePaste = async (e, startRowIdx, startColIdx) => {
+    const handlePaste = async (e, startColIdx) => {
         e.preventDefault();
         const text = e.clipboardData.getData('Text');
         if (!text.trim()) return;
 
         const rows = text.trim().split(/\r?\n/).map(row => row.split('\t'));
 
-        if (startRowIdx + rows.length > students.length)
-            return ctx.message.error("Pasted data exceeds student row boundary.");
+        // validate that the first column is the student name
+        if (!isNaN(parseFloat(rows[0][0]?.trim()))) return ctx.message.error('The first column must be the student name.');
 
+        // ── Step 1: fuzzy-match pasted names → students (strict 1-to-1, ≥85%) ──
+        const THRESHOLD = 0.85;
+
+        // Build candidate scores: pastedIdx → [{ student, sim }]
+        const usedStudentIds = new Set();
+
+        // First pass: find best candidate for each pasted row
+        const pastedNames = rows.map(r => r[0]?.trim() ?? '');
+
+        // For each pasted name, collect all students with sim >= threshold
+        const pastedCandidates = pastedNames.map(name => {
+            if (!name) return [];
+            return students
+                .map(s => ({ student: s, sim: getSimilarity(name, s.khmerName) }))
+                .filter(x => x.sim >= THRESHOLD)
+                .sort((a, b) => b.sim - a.sim);
+        });
+
+        // Greedy 1-to-1 assignment: iterate by best similarity first
+        // Build a flat list of (pastedIdx, studentId, sim) sorted desc by sim
+        const allCandidates = [];
+        pastedCandidates.forEach((candidates, pi) => {
+            candidates.forEach(c => allCandidates.push({ pi, student: c.student, sim: c.sim }));
+        });
+        allCandidates.sort((a, b) => b.sim - a.sim);
+
+        const matchedPastedIndices = new Set();
+        const pastedToStudent = {}; // pastedIdx → student
+
+        for (const { pi, student } of allCandidates) {
+            if (matchedPastedIndices.has(pi)) continue;
+            if (usedStudentIds.has(student.id)) continue;
+            pastedToStudent[pi] = student;
+            matchedPastedIndices.add(pi);
+            usedStudentIds.add(student.id);
+        }
+
+        // ── Step 2: determine mismatches ──
+        const notFoundInSystem = []; // pasted names that didn't match any student
+        const notFoundInPaste = [];  // students that weren't matched by any pasted row
+
+        pastedNames.forEach((name, pi) => {
+            if (name && !pastedToStudent[pi]) notFoundInSystem.push(name);
+        });
+
+        students.forEach(s => {
+            if (!usedStudentIds.has(s.id)) notFoundInPaste.push(s.khmerName);
+        });
+
+        // ── Step 3: validate score columns ──
         const updates = [];
 
         for (let r = 0; r < rows.length; r++) {
-            const studentIndex = startRowIdx + r;
-            const student = students[studentIndex];
-            const rowData = rows[r];
+            const student = pastedToStudent[r];
+            if (!student) continue; // unmatched row, skip score processing
+
+            const rowData = rows[r].slice(1); // drop the name column
 
             if (startColIdx + rowData.length > allClos.length)
                 return ctx.message.error("Pasted data exceeds column boundary.");
@@ -424,41 +476,65 @@ const App = () => {
 
                 if (raw === '') continue;
 
-                const num = parseFloat(raw);
-                if (isNaN(num) || num < 0 || num > clo.weight)
+                const value = parseFloat(raw);
+                if (isNaN(value) || value < 0 || value > clo.weight)
                     return ctx.message.error(`"${student.khmerName}", CLO ${clo.cloNumber}: value "${raw}" is invalid or exceeds maximum.`);
 
-                updates.push({
-                    student,
-                    clo,
-                    val: num
-                });
+                updates.push({ student, clo, value });
             }
+        }
+
+        // ── Step 4: show mismatch popup if any ──
+        const hasMismatch = notFoundInSystem.length > 0 || notFoundInPaste.length > 0;
+        if (hasMismatch) {
+            const { React: R } = ctx.libs;
+            Modal.warning({
+                title: 'Name Matching Issues',
+                width: 560,
+                content: R.createElement('div', null,
+                    notFoundInSystem.length > 0 && R.createElement('div', { style: { marginBottom: 12 } },
+                        R.createElement('strong', { style: { color: '#cf1322' } }, '⚠ Names in paste not found in system:'),
+                        R.createElement('ul', { style: { marginTop: 4, paddingLeft: 20 } },
+                            notFoundInSystem.map((n, i) => R.createElement('li', { key: i }, n))
+                        )
+                    ),
+                    notFoundInPaste.length > 0 && R.createElement('div', null,
+                        R.createElement('strong', { style: { color: '#ad6800' } }, '⚠ Students in system not found in paste:'),
+                        R.createElement('ul', { style: { marginTop: 4, paddingLeft: 20 } },
+                            notFoundInPaste.map((n, i) => R.createElement('li', { key: i }, n))
+                        )
+                    )
+                ),
+            });
         }
 
         if (updates.length === 0) return;
 
-        let globalMakeup = false;
-
+        // ── Step 5: apply scores ──
         setScoreMap(prev => {
             const next = { ...prev };
-            updates.forEach(({ student, clo, val }) => {
+            updates.forEach(({ student, clo, value }) => {
                 const key = scoreKey(student.id, clo.weightId);
                 const originalScore = student.scores.find(s => s.weightId == clo.weightId && s.courseId == schedule.courseId);
 
-                next[key] = { ...next[key], value: val, makeup: globalMakeup };
+                next[key] = { ...next[key], value, makeup };
 
-                if (originalScore && originalScore.value != val)
+                if (originalScore && originalScore.value != value)
                     ctx.api.request({
                         url: 'score:update',
                         method: 'POST',
                         params: { filterByTk: originalScore.id },
-                        data: { value: val, makeup: globalMakeup }
+                        data: { value, makeup }
                     }).then(res => {
                         const idx = student.scores.findIndex(s => s.weightId == clo.weightId);
                         student.scores[idx] = resObj(res);
-                    });
-                else
+                    }).catch(() =>
+                        setScoreMap(prev => ({
+                            ...prev,
+                            [key]: { ...prev[key], value: originalScore.value, makeup }
+                        }))
+                    );
+                else if (!originalScore && value > 0)
                     ctx.api.request({
                         url: 'score:create',
                         method: 'POST',
@@ -466,10 +542,17 @@ const App = () => {
                             student: student.id,
                             weight: clo.weightId,
                             course: schedule.courseId,
-                            value: val,
-                            makeup: globalMakeup
+                            value,
+                            makeup
                         }
-                    }).then(res => student.scores.push(resObj(res)));
+                    }).then(res =>
+                        student.scores.push(resObj(res))
+                    ).catch(() =>
+                        setScoreMap(prev => ({
+                            ...prev,
+                            [key]: { ...prev[key], value: 0, makeup }
+                        }))
+                    );
             });
             ctx.message.success(`Pasted ${updates.length} scores successfully.`);
             return next;
@@ -509,15 +592,42 @@ const App = () => {
         <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '20px' }}>
             <span>
                 ប្រឡងសង?
-                <Switch checked={isMakeup} onChange={setIsMakeup} />
+                <Switch checked={makeup} onChange={setMakeup} />
             </span>
             <Button type="primary" onClick={() => download(false)}>download word</Button>
             <Button onClick={() => download(true)}>download excel</Button>
         </div>
         <p>* = ធ្លាប់ធ្លាក់</p>
-        <p>you can also paste from excel as long as the name ordering is the same</p>
+        <p>paste from excel: first column must be the student Khmer name. The system will automatically match the score to the name</p>
         <ScoreTable ref={docRef} scoreMap={scoreMap} onCommit={handleCommit} onPaste={handlePaste} />
     </>);
 };
 
 ctx.render(<App />);
+
+function getSimilarity(s1, s2) {
+    if (!s1 || !s2) return 0; // Don't match empty names
+    let longer = s1.length > s2.length ? s1 : s2;
+    let shorter = s1.length > s2.length ? s2 : s1;
+    if (longer.length === 0) return 1.0;
+    return (longer.length - editDistance(longer, shorter)) / parseFloat(longer.length);
+}
+
+function editDistance(s1, s2) {
+    let costs = [];
+    for (let i = 0; i <= s1.length; i++) {
+        let lastValue = i;
+        for (let j = 0; j <= s2.length; j++) {
+            if (i == 0) costs[j] = j;
+            else if (j > 0) {
+                let newValue = costs[j - 1];
+                if (s1.charAt(i - 1) != s2.charAt(j - 1))
+                    newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+                costs[j - 1] = lastValue;
+                lastValue = newValue;
+            }
+        }
+        if (i > 0) costs[s2.length] = lastValue;
+    }
+    return costs[s2.length];
+}

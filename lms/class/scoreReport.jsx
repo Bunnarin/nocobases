@@ -10,7 +10,7 @@ const { data: { data: classs } } = await ctx.api.request({
     url: 'class:get',
     params: {
         filterByTk: classId,
-        appends: 'program,program.faculty,students,students.scores,students.scores.weight,schedules,schedules.course'
+        appends: 'program,program.faculty,students,students.scores,students.scores.weight,schedules,schedules.course,schedules.course.weights'
     }
 });
 
@@ -55,9 +55,9 @@ if (hasEngish)
         }
     }).then(res => englishCourseSpec = JSON.parse(resObj(res).value));
 
-const getCourseInfo = (scores, courseId) => {
+const getCourseInfo = (scores, courseId, noWeights = false) => {
     // some course have no weight
-    const courseScores = scores.filter(score => score.weight ? score.weight.courseId === courseId : score.courseId == courseId);
+    const courseScores = scores.filter(score => noWeights ? score.courseId == courseId : score.weight?.courseId == courseId);
     let total = courseScores.reduce((acc, score) => acc + score.value, 0);
     const hasMakeup = courseScores.some(score => score.makeup);
 
@@ -98,24 +98,18 @@ const getGPA = (score) => {
     return 0.0;
 };
 
-const getGPAInfo = (scores, courseId) => {
-    const { displayValue, hasMakeup } = getCourseInfo(scores, courseId);
-    if (isNaN(displayValue)) return { value: displayValue, hasMakeup };
-    return { value: getGPA(displayValue).toFixed(2), hasMakeup };
-}
-
 // 3b. Pre-compute avgScore & rank for each student
 const studentStats = students.map(student => {
     let studentHasMakeup = false;
     const weightedTotalScore = courses.reduce((acc, course) => {
-        const { total, displayValue, hasMakeup } = getCourseInfo(student.scores, course.id);
+        const { total, displayValue, hasMakeup } = getCourseInfo(student.scores, course.id, course.weights.length == 0);
         if (hasMakeup) studentHasMakeup = true;
         if (isNaN(displayValue)) return acc;
         const credit = course.theoryCredit + course.practiceCredit;
         return acc + total * credit;
-    }, 0);
+    }, 0).toFixed(2);
     const totalCredit = courses.reduce((acc, course) => {
-        const { displayValue } = getCourseInfo(student.scores, course.id);
+        const { displayValue } = getCourseInfo(student.scores, course.id, course.weights.length == 0);
         if (isNaN(displayValue)) return acc;
         const credit = course.theoryCredit + course.practiceCredit;
         return acc + credit;
@@ -162,7 +156,7 @@ const DocTemplate = forwardRef((props, ref) => (<div ref={ref}>
         </tr>
     </table>
     <p style={{ textAlign: 'center' }}>
-        លទ្ធផលប្រឡងឆមាសទី {semester.number} និស្សិតឆ្នាំទី {students[0].year} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
+        លទ្ធផលប្រឡងឆមាសទី {semester.number} និស្សិតឆ្នាំទី {classs.year} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
         <br />
         ថ្នាក់ {classs.name}
     </p>
@@ -177,7 +171,7 @@ const DocTemplate = forwardRef((props, ref) => (<div ref={ref}>
                 {courses.map(course => (<th>
                     {course.khmerName} <br /> {course.theoryCredit + course.practiceCredit} ({course.theoryCredit}-{course.practiceCredit})
                 </th>))}
-                <th>ពិន្ទុសममូល</th>
+                <th>ពិន្ទុសមមូល</th>
                 <th>ពិន្ទុមធ្យម</th>
                 <th>GPA</th>
                 <th>លទ្ធផល</th>
@@ -195,8 +189,9 @@ const DocTemplate = forwardRef((props, ref) => (<div ref={ref}>
                         <td>{student.sex}</td>
                         <td>{student.birthday}</td>
                         {courses.map(course => {
-                            const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
-                            return <td key={course.id}>{value}{hasMakeup ? '*' : ''}</td>;
+                            const { displayValue, hasMakeup } = getCourseInfo(student.scores, course.id, course.weights.length == 0);
+                            if (isNaN(displayValue)) return <td key={course.id}>{displayValue}{hasMakeup ? '*' : ''}</td>;
+                            return <td key={course.id}>{getGPA(displayValue).toFixed(2)}{hasMakeup ? '*' : ''}</td>;
                         })}
                         <td>{stats.weightedTotalScore}{stats.studentHasMakeup ? '*' : ''}</td>
                         <td>{stats.avgScore}{stats.studentHasMakeup ? '*' : ''}</td>

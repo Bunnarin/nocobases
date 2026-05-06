@@ -220,13 +220,11 @@ const DocTemplate = forwardRef((props, ref) => (
         <p style={{ textAlign: 'center' }}>
             បញ្ជីរាយនាមនិស្សិត {program.khmerName}
             <br />
-            ឆ្នាំទី{schedule.course.year} ជំនាន់ទី{semester.startYear - program.startYear + 1 - students[0].year} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
+            ឆ្នាំទី{schedule.course.year} ជំនាន់ទី{semester.startYear - program.startYear + 1 - schedule.class.year} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
             <br />
             {schedule.course.khmerName} ថ្នាក់ {schedule.class.name}
         </p>
-        {PLOs.map(plo => (
-            <PLOTable key={plo.id} plo={plo} />
-        ))}
+        {PLOs.map(plo => <PLOTable key={plo.id} plo={plo} />)}
     </div>
 ));
 

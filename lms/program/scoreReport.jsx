@@ -43,7 +43,7 @@ const { data: { data: classes } } = await ctx.api.request({
         filter: {
             programId
         },
-        appends: 'schedules,schedules.course,students,students.scores,students.scores.weight'
+        appends: 'schedules,schedules.course,schedules.course.weights,students,students.scores,students.scores.weight'
     }
 });
 
@@ -82,16 +82,16 @@ const GPAMap = (score) => {
     return 0.00;
 };
 
-const getGPAInfo = (scores, courseId) => {
-    const { displayValue, hasMakeup } = getScoreInfo(scores, courseId);
+const getGPAInfo = (scores, courseId, noWeights = false) => {
+    const { displayValue, hasMakeup } = getScoreInfo(scores, courseId, noWeights);
     if (isNaN(displayValue)) return { value: displayValue, hasMakeup };
     return { value: GPAMap(displayValue), hasMakeup };
 }
 
-const getScoreInfo = (scores, courseId) => {
+const getScoreInfo = (scores, courseId, noWeights) => {
     let total = 0;
     let hasMakeup = false;
-    const courseScores = scores.filter(s => s.weight.courseId === courseId);
+    const courseScores = scores.filter(s => noWeights ? s.courseId == courseId : s.weight?.courseId == courseId);
     courseScores.forEach(score => {
         total += score.value;
         if (score.makeup) hasMakeup = true;
@@ -141,23 +141,18 @@ const DocTemplate = forwardRef((props, ref) => (<div ref={ref}>
         </tr>
     </table>
     <p style={{ textAlign: 'center' }}>
-        លទ្ធផលប្រឡងឆមាសទី {semester.number} និស្សិតឆ្នាំទី {students[0].year} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
+        លទ្ធផលប្រឡងឆមាសទី {semester.number} ឆ្នាំសិក្សា {semester.startYear}-{semester.startYear + 1}
         <br />{program.khmerName}
     </p>
     <table>
         <thead>
             <tr>
-                <th rowSpan={2}>ID</th>
-                <th rowSpan={2}>ឈ្មោះ</th>
-                {courses.map(c => (<th>{c.khmerName}</th>))}
-                <th rowSpan={2}>ពិន្ទុសរុប</th>
-                <th rowSpan={2}>GPA</th>
-                <th rowSpan={2}>Grade</th>
-            </tr>
-            <tr>
-                {courses.map(c => (<th>
-                    {c.theoryCredit + c.practiceCredit} ({c.theoryCredit},{c.practiceCredit})
-                </th>))}
+                <th>ID</th>
+                <th>ឈ្មោះ</th>
+                {courses.map(c => (<th>{c.khmerName}<br /> ({c.theoryCredit + c.practiceCredit} ({c.theoryCredit}-{c.practiceCredit}))</th>))}
+                <th>ពិន្ទុសរុប</th>
+                <th>GPA</th>
+                <th>Grade</th>
             </tr>
         </thead>
         <tbody>
@@ -170,7 +165,7 @@ const DocTemplate = forwardRef((props, ref) => (<div ref={ref}>
                     return acc + val;
                 }, 0);
                 const averageGPA = courses.reduce((acc, course) => {
-                    const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
+                    const { value, hasMakeup } = getGPAInfo(student.scores, course.id, course.weights.length == 0);
                     if (hasMakeup) studentHasMakeup = true;
                     if (isNaN(value)) return acc;
                     return acc + value;
@@ -180,7 +175,7 @@ const DocTemplate = forwardRef((props, ref) => (<div ref={ref}>
                         <td>{student.id}</td>
                         <td>{student.khmerName}</td>
                         {courses.map(course => {
-                            const { value, hasMakeup } = getGPAInfo(student.scores, course.id);
+                            const { value, hasMakeup } = getGPAInfo(student.scores, course.id, course.weights.length == 0);
                             return <td key={course.id}>{value}{hasMakeup ? '*' : ''}</td>;
                         })}
                         <td>{total.toFixed(2)}{studentHasMakeup ? '*' : ''}</td>

@@ -5,19 +5,19 @@ console.log('foundation major: ', foundationMajor);
 // need to handle first year as well
 const auditLogs = [student.balance];
 let balance = student.balance;
-student.majors.forEach(m => {
+student.enrollments.forEach(e => {
     // deduct
     if (semesterNum == 1 && payAnnual) {
         if (student.year == 1)
             balance -= foundationMajor.annualFee;
         else
-            balance -= m.annualFee;
+            balance -= e.program.annualFee;
     }
     else {
         if (student.year == 1)
             balance -= foundationMajor.semesterFee;
         else
-            balance -= m.semesterFee;
+            balance -= e.program.semesterFee;
     }
     auditLogs.push(balance);
 

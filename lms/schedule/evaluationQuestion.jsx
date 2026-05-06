@@ -87,7 +87,7 @@ const App = () => {
       if (field.required && !formData[field.label])
         return ctx.message.error(`Please answer: ${field.label}`);
       // don't want to store empty answer
-      else if (!field.required && field.type == 'text' && 
+      else if (!field.required && field.type == 'text' &&
         emptyAnswers.includes(formData[field.label]?.trim()?.toLowerCase().replace('ទេ', '')))
         formData[field.label] = '';
 
@@ -96,12 +96,12 @@ const App = () => {
       method: 'POST',
       data: {
         scheduleId,
-        answers: questions.map(q => formData[q.label]?.trim())
+        answers: questions.map(q => formData[q.label]?.trim() ?? '')
       }
+    }).then(() => {
+      ctx.message.success('រួចរាល់');
+      setTimeout(() => window.location.href = '/', 3000);
     });
-
-    ctx.message.success('រួចរាល់');
-    setTimeout(() => window.location.href = '/', 3000);
   };
 
   return (

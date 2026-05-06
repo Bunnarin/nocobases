@@ -40,17 +40,14 @@ const { data: { data: students } } = await ctx.api.request({
     params: {
         pageSize: 10000,
         sort: 'khmerName',
-        filter: {
-            $and: [
-                { status: { $eq: "0" } },
-                facultyId == 1 ? {
-                    classes: { programId: 1 }
-                } : {
-                    majors: { facultyId }
-                }
-            ],
+        filter: facultyId == 1 ? {
+            classes: { programId: 1 }
+        } : {
+            enrollments: {
+                program: { facultyId }
+            }
         },
-        appends: 'background,background.province,scholarshipSource,majors,majors.faculty,classes,user'
+        appends: 'background,background.province,scholarshipSource,classes,user,enrollments,enrollments.program,enrollments.program.faculty'
     }
 });
 
@@ -58,26 +55,33 @@ function buildGroups(filtered, groupBy) {
     const groups = {};
     filtered.forEach(student => {
         if (groupBy === 'faculty')
-            student.majors.forEach(m => {
-                const fac = m.faculty;
+            student.enrollments.forEach(e => {
+                const fac = e.program.faculty;
                 const key = fac?.id || 'unknown';
-                if (!groups[key]) groups[key] = { key, label: `មហាវិទ្យាល័យ ${fac?.khmerName}`, students: [] };
+                groups[key] ??= { key, label: `មហាវិទ្យាល័យ ${fac?.khmerName}`, students: [] };
                 groups[key].students.push(student);
             });
-        else if (groupBy === 'major')
-            student.majors.forEach(m => {
-                const key = m.id || 'unknown';
-                if (!groups[key]) groups[key] = { key, label: m.khmerName, students: [] };
+        else if (groupBy === 'program')
+            student.enrollments.forEach(e => {
+                if (e.program.facultyId != facultyId) return;
+                const key = e.programId || 'unknown';
+                groups[key] ??= { key, label: e.program.khmerName, students: [] };
                 groups[key].students.push(student);
             });
         else if (groupBy === 'generation') {
-            const key = student.generation || 'unknown';
-            groups[key] ??= { key, label: `ជំនាន់ទី ${key}`, students: [] };
-            groups[key].students.push(student);
+            student.enrollments.forEach(e => {
+                if (e.program.facultyId != facultyId) return;
+                const key = e.generation || 'unknown';
+                groups[key] ??= { key, label: `ជំនាន់ទី ${key}`, students: [] };
+                groups[key].students.push(student);
+            });
         } else if (groupBy === 'year') {
-            const key = student.year || 'unknown';
-            groups[key] ??= { key, label: `ឆ្នាំទី ${key}`, students: [] };
-            groups[key].students.push(student);
+            student.enrollments.forEach(e => {
+                if (e.program.facultyId != facultyId) return;
+                const key = e.year || 'unknown';
+                groups[key] ??= { key, label: `ឆ្នាំទី ${key}`, students: [] };
+                groups[key].students.push(student);
+            });
         } else if (!groupBy) {
             const key = 'all';
             groups[key] ??= { key, label: 'all', students: [] };
@@ -91,9 +95,9 @@ function buildGroups(filtered, groupBy) {
 const DocTemplate = forwardRef(({ selectedProgramId, selectedYear, selectedGeneration, groupBy }, ref) => {
     const selectedProgram = faculty.programs?.find(p => p.id === selectedProgramId);
     const filtered = students.filter(s =>
-        (!selectedYear || s.year == selectedYear) &&
-        (!selectedGeneration || s.generation == selectedGeneration) &&
-        (!selectedProgramId || s.majors?.some(m => m.id === selectedProgramId))
+        (!selectedYear || s.enrollments.some(e => e.year == selectedYear)) &&
+        (!selectedGeneration || s.enrollments.some(e => e.generation == selectedGeneration)) &&
+        (!selectedProgramId || s.enrollments.some(e => e.programId === selectedProgramId))
     );
     const sortedGroups = buildGroups(filtered, groupBy);
     const colCount = 11 + (!selectedProgramId ? 1 : 0) + (!selectedYear ? 1 : 0) + (!selectedGeneration ? 1 : 0);
@@ -144,9 +148,9 @@ const DocTemplate = forwardRef(({ selectedProgramId, selectedYear, selectedGener
                     <th>ភេទ</th>
                     <th>ថ្ងៃខែឆ្នាំកំណើត</th>
                     <th>មកពី</th>
-                    {!selectedProgramId && <th>ជំនាញ</th>}
-                    {!selectedYear && <th>ឆ្នាំ</th>}
-                    {!selectedGeneration && <th>ជំនាន់</th>}
+                    {!selectedProgramId && groupBy != 'program' && groupBy == 'faculty' && <th>ជំនាញ</th>}
+                    {!selectedYear && groupBy != 'year' && <th>ឆ្នាំ</th>}
+                    {!selectedGeneration && groupBy != 'generation' && <th>ជំនាន់</th>}
                     <th>ថ្នាក់</th>
                     <th>អាហារូបករណ៍</th>
                     <th>លេខទូរស័ព្ទ</th>
@@ -173,10 +177,12 @@ const DocTemplate = forwardRef(({ selectedProgramId, selectedYear, selectedGener
                                     <td>{s.sex}</td>
                                     <td>{s.birthday}</td>
                                     <td>{s.background?.province?.name}</td>
-                                    {!selectedProgramId && <td>{s.majors?.map(m => m.khmerName).join(', ')}</td>}
-                                    {!selectedYear && <td>{s.year}</td>}
-                                    {!selectedGeneration && <td>{s.generation}</td>}
-                                    <td>{s.classes.find(cls => cls.programId == selectedProgramId)?.name}</td>
+                                    {!selectedProgramId && groupBy != 'program' && groupBy != 'faculty' && <td>{s.enrollments.find(e => e.program.facultyId == facultyId)?.program?.khmerName}</td>}
+                                    {groupBy == 'faculty' && <td>{s.enrollments.filter(e => e.program.facultyId == group.key)?.map(e => e.program.khmerName)?.join(', ')}</td>}
+                                    {!selectedYear && groupBy != 'year' && groupBy != 'faculty' && <td>{s.enrollments.find(e => e.program.facultyId == facultyId)?.year}</td>}
+                                    {!selectedYear && groupBy == 'faculty' && <td>{s.enrollments.find(e => e.program.facultyId == group.key)?.year}</td>}
+                                    {!selectedGeneration && groupBy != 'generation' && <td>{s.enrollments.find(e => e.program.facultyId == facultyId)?.generation}</td>}
+                                    <td>{s.classes.filter(cls => cls.programId == selectedProgramId || !selectedProgramId).map(c => c.name).join(', ')}</td>
                                     <td>
                                         {s.scholarshipSource ? s.scholarshipSource.name + s.scholarshipCoverage : 'បង់ថ្លៃ'}
                                     </td>
@@ -199,7 +205,7 @@ const DocTemplate = forwardRef(({ selectedProgramId, selectedYear, selectedGener
             <tr>
                 <td>
                     {facultyId == 1 && <>
-                        ចំនួននិស្សិតសរុប(រាប់ជំនាញ២)៖ {filtered.reduce((acc, s) => acc + (s.majors?.length || 0), 0)}នាក់ (ស្រី៖ {filtered.filter(s => s.sex == 'F').reduce((acc, s) => acc + (s.majors?.length || 0), 0)}នាក់)
+                        ចំនួននិស្សិតសរុប(រាប់ជំនាញ២)៖ {filtered.reduce((acc, s) => acc + (s.enrollments.length || 0), 0)}នាក់ (ស្រី៖ {filtered.filter(s => s.sex == 'F').reduce((acc, s) => acc + (s.enrollments?.length || 0), 0)}នាក់)
                         <br />
                     </>}
                     ចំនួននិស្សិតសរុប៖ {filtered.length}នាក់ (ស្រី៖ {filtered.filter(s => s.sex == 'F').length}នាក់)
@@ -222,7 +228,7 @@ const DocTemplate = forwardRef(({ selectedProgramId, selectedYear, selectedGener
                 </td>
             </tr>
         </table>
-    </div>);
+    </div >);
 });
 
 const App = () => {
@@ -230,7 +236,7 @@ const App = () => {
     const [selectedProgramId, setSelectedProgramId] = useState(null);
     const [selectedYear, setSelectedYear] = useState(null);
     const [selectedGeneration, setSelectedGeneration] = useState(null);
-    const [groupBy, setGroupBy] = useState(facultyId == 1 ? 'faculty' : 'major');
+    const [groupBy, setGroupBy] = useState(facultyId == 1 ? 'faculty' : 'program');
 
     const download = (isExcel = false) => {
         const fullHTML = `
@@ -263,8 +269,8 @@ const App = () => {
         URL.revokeObjectURL(a.href);
     };
 
-    const generations = [...new Set(students.map(s => s.generation).filter(g => g != null))].sort((a, b) => a - b);
-    const years = [...new Set(students.map(s => s.year).filter(y => y != null))].sort();
+    const generations = [...new Set(students.flatMap(s => s.enrollments?.map(e => e.generation)).filter(g => g != null))].sort((a, b) => a - b);
+    const years = [...new Set(students.flatMap(s => s.enrollments?.map(e => e.year)).filter(y => y != null))].sort();
     return (<>
         program:
         <Select
@@ -302,7 +308,7 @@ const App = () => {
                 options={[
                     { value: null, label: 'None' },
                     ...(!selectedYear ? [{ value: 'year', label: 'ឆ្នាំ' }] : []),
-                    ...(!selectedProgramId ? [{ value: 'major', label: 'ជំនាញ' }] : []),
+                    ...(!selectedProgramId ? [{ value: 'program', label: 'ជំនាញ' }] : []),
                     ...(!selectedGeneration ? [{ value: 'generation', label: 'ជំនាន់' }] : []),
                 ]}
             />
